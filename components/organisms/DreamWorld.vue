@@ -10,34 +10,36 @@
 <script setup>
 import glowLayerSrc from '~/shaders/glowLayer.frag.glsl?raw'
 
-// Realms cycle as you descend: sea -> forest -> cosmos -> sea ... Length must match REALMS in the shader.
-// palette: cosine palette (a, b, c, d). shape: [creature body, eye/highlight, web, nebula] strengths.
+// Realms cycle one per vessel: every vessel you dive into opens onto the next realm. Length must match REALMS
+// in the shader. Colours are linear RGB (the shader tonemaps at the end):
+// deep = the depths, shallow = toward the light above, light = shafts / highlights / caustics, accent = bioluminescence.
+// shape: [light shafts, spire density, particles, bioluminescence] strengths.
 const REALMS = [
-  { // Sea: lantern-drifters
-    palette: [0.15, 0.35, 0.45, 0.15, 0.30, 0.35, 1.0, 1.0, 1.0, 0.60, 0.65, 0.70],
-    shape: [1.0, 0.9, 0.3, 0.5],
+  { // Teal sea: murky green-blue water, cold light from above
+    deep: [0.006, 0.026, 0.032], shallow: [0.06, 0.25, 0.26], light: [0.55, 0.95, 0.85], accent: [0.3, 1.0, 0.65],
+    shape: [1.0, 0.6, 1.0, 0.6],
   },
-  { // Forest: spore-lanterns on a mycelium web
-    palette: [0.40, 0.25, 0.45, 0.35, 0.20, 0.30, 1.0, 1.0, 0.5, 0.80, 0.90, 0.30],
-    shape: [0.9, 0.9, 0.8, 0.3],
+  { // Sunken garden: green-gold, warm light, amber spores
+    deep: [0.014, 0.026, 0.01], shallow: [0.18, 0.22, 0.07], light: [1.0, 0.86, 0.52], accent: [1.0, 0.55, 0.18],
+    shape: [1.1, 0.75, 0.9, 0.8],
   },
-  { // Cosmos: coral-stars in nebula
-    palette: [0.55, 0.35, 0.25, 0.40, 0.30, 0.25, 1.0, 1.0, 1.0, 0.00, 0.10, 0.20],
-    shape: [1.0, 0.9, 0.4, 1.0],
+  { // Violet abyss: deep indigo, starlike plankton
+    deep: [0.012, 0.009, 0.038], shallow: [0.09, 0.07, 0.22], light: [0.72, 0.66, 1.0], accent: [0.85, 0.4, 1.0],
+    shape: [0.75, 0.45, 1.2, 1.0],
   },
 ]
 
-const PARALLAX = 0.22 // screen units the nearest layer shifts at full input
-const DESCENT_SPEED = 0.35 // octaves per second at lean 1: leaning sets the speed of the fall, so it never ends
+const PARALLAX = 1 // head offset scale; each layer's own parallax factor is the `par` argument of layerP() in the shader
+const DESCENT_SPEED = 0.35 // octaves per second at lean 1 (one vessel = 2.77 octaves, ~8 s): leaning sets the speed of the dive
 const LEAN_ZOOM = 0.5 // octaves of instant zoom per unit of lean, so leaning responds immediately
-const IDLE_DESCENT = 0.015 // octaves per second with no input: the world is always slowly arriving
+const IDLE_DESCENT = 0.02 // octaves per second with no input: the vessel is always slowly drawing you in
 const OMEGA_XY = 3 // spring stiffness: lower = floatier
 const OMEGA_Z = 2.2
 const POINTER_OVERRIDE_MS = 2000 // mouse/scroll takes over for this long after use when no face is seen
 const LEANED_IN = 0.4 // smoothed lean that counts as "they got it": hides the prompt
 
 // Idle drift: a slow Lissajous wander in screen units. Periods ~50 s and ~70 s so it never visibly loops.
-const DRIFT_AMP = 0.08
+const DRIFT_AMP = 0.3
 const DRIFT_SPEED = [0.12, 0.09]
 
 const NEUTRAL = { x: 0, y: 0, z: 0 }
@@ -85,8 +87,7 @@ const uniforms = {
   uHeadOffset: new Float32Array(2),
   uLook: new Float32Array(2),
   uDescent: 0,
-  uBaseScale: 1.5,
-  uPalette: new Float32Array(REALMS.flatMap((r) => r.palette)),
+  uRealm: new Float32Array(REALMS.flatMap((r) => [...r.deep, ...r.shallow, ...r.light, ...r.accent])),
   uShape: new Float32Array(REALMS.flatMap((r) => r.shape)),
   uMood: mood.value,
   uGesture: gestures.value,
