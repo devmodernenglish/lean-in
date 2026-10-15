@@ -33,6 +33,8 @@ const PARALLAX = 1 // head offset scale; each layer's own parallax factor is the
 const DESCENT_SPEED = 0.35 // octaves per second at lean 1 (one vessel = 2.77 octaves, ~8 s): leaning sets the speed of the dive
 const LEAN_ZOOM = 0.5 // octaves of instant zoom per unit of lean, so leaning responds immediately
 const IDLE_DESCENT = 0.02 // octaves per second with no input: the vessel is always slowly drawing you in
+const LEVEL_OCT = 2.7692 // octaves per vessel; must match LEVEL_OCT in the shader
+const MOUTH_DIVE = 0.6 // extra lean-equivalent while the mouth is open: breathe in to dive
 const OMEGA_XY = 3 // spring stiffness: lower = floatier
 const OMEGA_Z = 2.2
 const POINTER_OVERRIDE_MS = 2000 // mouse/scroll takes over for this long after use when no face is seen
@@ -61,6 +63,12 @@ const z = useSpring(0, OMEGA_Z)
 // Glow eases in from black on load instead of popping
 const fade = useSpring(params.has('fade') ? Number(params.get('fade')) : 0, 1.4)
 fade.target = 1
+
+// An intentional blink (long or double) carries you through one vessel into the next world
+const jump = useSpring(0, 1.6)
+gestures.onIntent(() => {
+  jump.target += LEVEL_OCT
+})
 
 const hasLeaned = ref(false)
 
@@ -92,7 +100,10 @@ const uniforms = {
   uMood: mood.value,
   uGesture: gestures.value,
   uFade: 0,
+  uTime: 0, // overrides GlCanvas's clock with the mood-scaled one below
 }
+
+let worldTime = 0 // ambient clock: mood speeds it up or slows it down without ever jumping
 
 let descent = Number(params.get('descent')) || 0 // octaves travelled; unbounded in both directions
 
@@ -107,8 +118,10 @@ function onFrame({ dt, time }) {
   uniforms.uHeadOffset[1] = y.value * PARALLAX + Math.sin(time * DRIFT_SPEED[1] + 1.3) * DRIFT_AMP
   uniforms.uLook[0] = x.value
   uniforms.uLook[1] = y.value
-  descent += (IDLE_DESCENT + DESCENT_SPEED * z.value) * dt
-  uniforms.uDescent = descent + LEAN_ZOOM * z.value
+  descent += (IDLE_DESCENT + DESCENT_SPEED * (z.value + MOUTH_DIVE * gestures.descentBoost)) * mood.descentScale * dt
+  uniforms.uDescent = descent + jump.value + LEAN_ZOOM * z.value
+  worldTime += dt * mood.timeScale
+  uniforms.uTime = worldTime
   uniforms.uFade = fade.value
 }
 
