@@ -22,7 +22,8 @@ float caustics(vec2 p, float t, float seed) {
 
 // Profile of a spire: its half-width at height y. Ribs, a slow bulge, and now and then a swollen node.
 float spireWidth(float y, vec3 h, float freq, float phase) {
-  float ribs = pow(abs(sin(y * freq + phase)), 10.0) + 0.5 * pow(abs(sin(y * freq * 0.5 + 1.0)), 40.0);
+  float organicY = y + 0.06 * sin(y * 3.7 + phase) + 0.025 * sin(y * 9.3 + h.x * 8.0);
+  float ribs = pow(abs(sin(organicY * freq + phase)), 6.0) + 0.5 * pow(abs(sin(organicY * freq * 0.5 + 1.0)), 18.0);
   float node = exp(-pow((fract(y * 0.45 + h.y) - 0.5) / 0.06, 2.0));
   return (0.025 + 0.03 * h.x) * (1.0 + 0.2 * sin(y * 1.7 + h.z * 9.0) + 0.3 * ribs + 0.7 * node);
 }
@@ -35,7 +36,7 @@ vec4 spires(vec2 p, float seed, float density, float px, float t, Realm rm) {
   vec3 h = hash3(vec2(ci, seed));
   if (h.y > density) return vec4(0.0);
 
-  float cx = (ci + 0.5 + (h.z - 0.5) * 0.25) * CELL + 0.045 * sin(p.y * 1.3 + h.z * 6.0 + t * 0.05);
+  float cx = (ci + 0.5 + (h.z - 0.5) * 0.25) * CELL + 0.065 * sin(p.y * 1.7 + h.z * 6.0 + t * 0.09) + 0.018 * sin(p.y * 4.3 + h.x * 8.0 + t * 0.13);
   float freq = 7.0 + 7.0 * h.z;
   float phase = h.x * 6.2831;
   float top = 0.1 + 1.2 * h.x;
@@ -58,6 +59,10 @@ vec4 spires(vec2 p, float seed, float density, float px, float t, Realm rm) {
   float pore = pow(abs(sin(p.y * freq + phase)), 40.0) * smoothstep(0.25, 0.0, abs(nx - 0.3 * sin(p.y * 3.0 + phase)))
     * smoothstep(0.4, 0.9, sin(p.y * freq / 3.0 + h.y * 7.0)); // smooth gate: only every few ribs
   col += rm.accent * pore * rm.shape.w * 0.7;
+  // Hairline luminous seams follow each tower's curved sides and ribbing.
+  float edge = exp(-pow((abs(nx) - 0.88) / 0.055, 2.0));
+  float ribLine = pow(abs(sin(p.y * freq + phase)), 90.0);
+  col += rm.light * (edge * 0.15 + ribLine * 0.075) * lightAmt;
   return vec4(col, cov);
 }
 

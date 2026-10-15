@@ -1,8 +1,17 @@
 <template>
   <div class="dream-world">
     <GlCanvas :fragment="glowLayerSrc" :uniforms="uniforms" :max-dpr="1" @frame="onFrame" />
-    <CalibrationRing class="dream-world__ring" :progress="progress" :visible="status === 'calibrating'" />
-    <HintLine class="dream-world__hint" :text="hint" />
+    <div v-if="cameraVisible && cameraStream" class="dream-world__reflection" aria-hidden="true">
+      <video ref="reflectionVideo" class="dream-world__video" autoplay muted playsinline />
+    </div>
+    <ExperienceIntro v-if="introOpen" :status="status" :progress="progress" @enable="head.start()" @enter="introOpen = false" />
+    <div v-else class="dream-world__controls">
+      <button class="dream-world__help" type="button" :aria-pressed="cameraVisible" :disabled="status === 'loading'" @click="toggleCameraView">{{ cameraVisible ? 'Hide camera view' : 'Show camera view' }}</button>
+      <button class="dream-world__help" type="button" @click="introOpen = true">How to explore <span aria-hidden="true">↗</span></button>
+    </div>
+    <p v-if="!introOpen && cameraMessage" class="dream-world__camera-message" role="status">{{ cameraMessage }}</p>
+    <CalibrationRing class="dream-world__ring" :progress="progress" :visible="!introOpen && status === 'calibrating'" />
+    <HintLine class="dream-world__hint" :text="introOpen ? '' : hint" />
     <StatusDot class="dream-world__status" :live="status === 'tracking'" :label="statusLabel" />
   </div>
 </template>
@@ -11,7 +20,7 @@
 import glowLayerSrc from '~/shaders/glowLayer.frag.glsl?raw'
 import { createDiveCamera } from '~/utils/diveCamera'
 
-// Realms cycle one per level: every bubble you dive into opens onto the next realm. Length must match REALMS
+// Bubbles open into different electric deep-sea worlds. Length must match REALMS
 // in the shader. Colours are linear RGB (the shader tonemaps at the end):
 // deep = the depths, shallow = toward the light above, light = shafts / highlights / caustics, accent = bioluminescence.
 // shape: [light shafts, spire density, particles, bioluminescence] strengths.
@@ -20,12 +29,12 @@ const REALMS = [
     deep: [0.004, 0.010, 0.045], shallow: [0.03, 0.10, 0.42], light: [0.45, 0.78, 1.0], accent: [1.0, 0.3, 0.85],
     shape: [1.0, 0.6, 1.0, 0.7],
   },
-  { // Ultraviolet: violet water, lavender light, cyan plankton
+  { // Abyssal violet: fine cyan bioluminescence and lavender light
     deep: [0.014, 0.005, 0.040], shallow: [0.16, 0.05, 0.34], light: [0.85, 0.62, 1.0], accent: [0.2, 0.95, 1.0],
     shape: [0.9, 0.5, 1.2, 1.0],
   },
-  { // Neon lagoon: cyan-green water, mint light, pink sparks
-    deep: [0.003, 0.030, 0.030], shallow: [0.02, 0.26, 0.24], light: [0.5, 1.0, 0.85], accent: [1.0, 0.35, 0.7],
+  { // Electric reef: turquoise depths and pale aqua light
+    deep: [0.002, 0.018, 0.035], shallow: [0.015, 0.20, 0.28], light: [0.40, 0.95, 1.0], accent: [0.20, 1.0, 0.75],
     shape: [1.1, 0.7, 0.9, 0.8],
   },
 ]
@@ -48,7 +57,35 @@ const NEUTRAL = { x: 0, y: 0, z: 0 }
 
 // Head pose first, so its detection runs before the springs step each frame
 const head = useHeadPose()
-const { status, progress } = head
+const { status, progress, cameraStream } = head
+const introOpen = ref(true)
+const cameraVisible = ref(false)
+const reflectionVideo = ref(null)
+const cameraMessage = computed(() => {
+  if (!cameraVisible.value) return ''
+  if (status.value === 'unavailable') return 'Camera unavailable. Allow camera access in your browser and try again.'
+  if (!cameraStream.value) return 'Connecting to your camera…'
+  return ''
+})
+
+async function toggleCameraView() {
+  if (cameraVisible.value) {
+    cameraVisible.value = false
+    return
+  }
+  cameraVisible.value = true
+  await head.start()
+}
+
+watchEffect(() => {
+  const video = reflectionVideo.value
+  if (video) {
+    video.srcObject = cameraStream.value
+    video.play().catch(() => {})
+  }
+}, { flush: 'post' })
+const handsEnabled = computed(() => !introOpen.value)
+const hands = useHands(head, handsEnabled)
 const pointer = usePointerInput()
 const mood = useMood(head)
 const gestures = useGestures(head)
@@ -80,11 +117,12 @@ const hasLeaned = ref(false)
 
 const hint = computed(() => {
   switch (status.value) {
+    case 'idle': return 'Move to stir light. Hold click to gather; release to cast. Scroll to dive.'
     case 'loading': return 'Sit back.'
     case 'calibrating': return 'Sit back. Hold still.'
     case 'lost': return 'Come back into view.'
-    case 'unavailable': return hasLeaned.value ? '' : 'No camera. Move the mouse, scroll to lean in.'
-    default: return hasLeaned.value ? '' : 'Now lean in.'
+    case 'unavailable': return 'Move to stir light. Hold click to gather; release to cast.'
+    default: return hands.status.value === 'tracking' ? 'Pinch to gather light. Open your hand to release it. Smile at the creatures.' : hands.status.value === 'unavailable' ? 'Hand tracking unavailable. Move the mouse; hold click to gather light.' : hasLeaned.value ? 'Raise a hand to stir light. Smile at the creatures.' : 'Now lean in. Raise a hand to stir light.'
   }
 })
 const statusLabel = computed(() => (status.value === 'tracking' ? 'Head tracking' : 'Mouse and scroll'))
@@ -93,7 +131,7 @@ const statusLabel = computed(() => (status.value === 'tracking' ? 'Head tracking
 function currentInput(now) {
   if (fixedSteer) return { x: fixedSteer[0] || 0, y: fixedSteer[1] || 0, z: 0 }
   if (head.tracking) return head
-  const cameraUp = status.value !== 'unavailable' && status.value !== 'loading'
+  const cameraUp = !['idle', 'unavailable', 'loading'].includes(status.value)
   if (!cameraUp || now - pointer.lastActive < POINTER_OVERRIDE_MS) return pointer
   return NEUTRAL
 }
@@ -107,6 +145,9 @@ const uniforms = {
   uCue: 0, // 0..1 how strongly to mark it
   uRealm: new Float32Array(REALMS.flatMap((r) => [...r.deep, ...r.shallow, ...r.light, ...r.accent])),
   uShape: new Float32Array(REALMS.flatMap((r) => r.shape)),
+  uPalm: hands.palm,
+  uHandTrail: hands.trail,
+  uHandBurst: hands.burst,
   uMood: mood.value,
   uGesture: gestures.value,
   uFade: 0,
@@ -165,6 +206,62 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   inset: 0;
   background: $color-base;
 
+  &__reflection {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    opacity: .38;
+    mix-blend-mode: screen;
+    mask-image: radial-gradient(ellipse at center, #000 20%, transparent 80%);
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, #32d9e6, #7060d9 55%, #e77bc5);
+      mix-blend-mode: color;
+    }
+  }
+  &__video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+    filter: grayscale(1) contrast(1.2) brightness(.85);
+  }
+  &__controls {
+    position: absolute;
+    top: 24px;
+    right: 24px;
+    left: 24px;
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  &__camera-message {
+    position: absolute;
+    top: 84px;
+    right: 24px;
+    left: 24px;
+    text-align: right;
+    color: $color-text;
+    font-size: 12px;
+  }
+  &__help {
+    border: 1px solid #cfe3ff30;
+    border-radius: 30px;
+    padding: 12px 18px;
+    background: #09122299;
+    color: $color-text;
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    &[aria-pressed='true'] { border-color: #aee9ee99; background: #244859bb; }
+    &:disabled { opacity: .6; cursor: wait; }
+    &:focus-visible { outline: 2px solid #aee9ee; outline-offset: 4px; }
+    span { margin-left: 12px; }
+  }
   &__ring {
     position: absolute;
     top: 50%;

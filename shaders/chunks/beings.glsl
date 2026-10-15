@@ -11,7 +11,7 @@ vec3 drifters(vec2 p, float perUnit, float t, float seed, float px, Realm rm) {
   const float SIZE = 0.17; // bell radius, in cell units
   vec2 c = vec2(0.5 + 0.12 * sin(t * 0.13 + h.x * 6.2831), 0.72 + 0.06 * sin(t * 0.21 + h.z * 6.2831));
   vec2 l = (fract(g) - c) / SIZE;                    // drifter space: unit = bell radius, y up
-  float tilt = 0.3 * sin(t * 0.17 + h.z * 9.0);
+  float tilt = 0.3 * sin(t * 0.17 + h.z * 9.0) + uMood.x * 0.16 * sin(t * 2.3 + h.x * 6.0);
   l = mat2(cos(tilt), -sin(tilt), sin(tilt), cos(tilt)) * l;
   float lpx = px * perUnit / SIZE;                   // one pixel in drifter units
 
@@ -40,5 +40,5 @@ vec3 drifters(vec2 p, float perUnit, float t, float seed, float px, Realm rm) {
 
   float glow = rim * 0.35 + fill * 0.45 + margin * 0.3 + canals + threads * 0.25;
   vec3 lights = rm.accent * rm.shape.w * (margin * 0.35 + gonads) * (0.6 + 0.4 * pulse); // bioluminescence
-  return rm.light * glow * 0.22 + lights * 0.5;
+  return (rm.light * glow * 0.22 + lights * 0.5) * (1.0 + uMood.x * (1.3 + 0.5 * sin(t * 3.0 + h.x * 6.0)));
 }

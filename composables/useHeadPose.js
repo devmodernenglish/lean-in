@@ -22,17 +22,19 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
  * @returns {{
  *   x: number, y: number, z: number, tracking: boolean,
  *   blendshapes: Record<string, number>,  // MediaPipe's 52 face scores 0..1 (eyeBlinkLeft, jawOpen, mouthSmileLeft...); raw, unsmoothed, only fresh while tracking
- *   status: import('vue').Ref<'loading'|'calibrating'|'tracking'|'lost'|'unavailable'>,
+ *   status: import('vue').Ref<'idle'|'loading'|'calibrating'|'tracking'|'lost'|'unavailable'>,
  *   progress: import('vue').Ref<number>,
  *   recalibrate: () => void,
  * }}
  */
 export function useHeadPose() {
-  const status = ref('loading')
+  const status = ref('idle')
   const progress = ref(0) // calibration 0..1
-  const pose = { x: 0, y: 0, z: 0, tracking: false, blendshapes: {}, status, progress, recalibrate }
+  const cameraStream = shallowRef(null)
+  const pose = { x: 0, y: 0, z: 0, tracking: false, blendshapes: {}, status, progress, cameraStream, recalibrate, start }
 
   let video = null
+  Object.defineProperty(pose, 'video', { get: () => video })
   let stream = null
   let landmarker = null
   let disposed = false
@@ -54,13 +56,20 @@ export function useHeadPose() {
   }
 
   async function start() {
+    if (disposed || !['idle', 'unavailable'].includes(status.value)) return
+    status.value = 'loading'
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 640, height: 480, facingMode: 'user' },
         audio: false,
       })
+      if (disposed) {
+        stream.getTracks().forEach((track) => track.stop())
+        return
+      }
       video = Object.assign(document.createElement('video'), { muted: true, playsInline: true, srcObject: stream })
       await video.play()
+      cameraStream.value = stream
 
       const { FaceLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision')
       const fileset = await FilesetResolver.forVisionTasks(WASM_PATH)
@@ -77,7 +86,10 @@ export function useHeadPose() {
     } catch (err) {
       console.warn('Head tracking unavailable, using mouse fallback:', err)
       status.value = 'unavailable'
-      dispose()
+      cameraStream.value = null
+      stream?.getTracks().forEach((track) => track.stop())
+      landmarker?.close()
+      landmarker = null
     }
   }
 
@@ -135,6 +147,7 @@ export function useHeadPose() {
 
   function dispose() {
     disposed = true
+    cameraStream.value = null
     stream?.getTracks().forEach((t) => t.stop())
     landmarker?.close()
     landmarker = null
@@ -143,7 +156,6 @@ export function useHeadPose() {
 
   useRAF(detect)
   onScopeDispose(dispose)
-  start()
 
   return pose
 }

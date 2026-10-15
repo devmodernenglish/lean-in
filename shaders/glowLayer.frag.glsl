@@ -22,6 +22,9 @@ uniform vec3 uRealm[REALMS * 4];   // per realm: deep, shallow, light, accent co
 uniform vec4 uShape[REALMS];       // per realm: light shafts, spire density, particles, bioluminescence
 uniform vec4 uMood;                // (joy, sadness, surprise, tension) 0..1, see chunks/mood.glsl
 uniform vec4 uGesture;             // (blink, mouth, wink, spare) 0..1, see chunks/gestures.glsl
+uniform vec4 uPalm;
+uniform vec4 uHandTrail[12];
+uniform vec4 uHandBurst;
 uniform float uFade;               // @slider 0..1 default 1 "Fade in from black"
 
 out vec4 fragColor;
@@ -34,9 +37,11 @@ out vec4 fragColor;
 #include "particles"
 #include "beings"
 #include "bubbles"
+#include "ecosystems"
 #include "tonemap"
 #include "mood"
 #include "gestures"
+#include "hands"
 
 const float MIN_BUBBLE = 0.006; // bubbles smaller than this on screen (~5 px) get a cheap glow inside
 const vec3 BASE = vec3(0.020, 0.031, 0.078); // #050814: the colour we fade in from
@@ -83,7 +88,7 @@ vec3 fogged(vec3 col, vec2 m, float amount, float shaft, Realm rm) {
 }
 
 // Everything in one world that is not inside an entered bubble. p: this world's coordinates.
-vec3 world(vec2 p, vec2 cam, float s, uint wseed, float realmIdx, Realm rm) {
+vec3 scenery(vec2 p, vec2 cam, float s, uint wseed, float realmIdx, Realm rm) {
   float seed = seedOffset(wseed);
   float px = s / uResolution.y; // one pixel in this world's units: keeps edges crisp
 
@@ -94,12 +99,12 @@ vec3 world(vec2 p, vec2 cam, float s, uint wseed, float realmIdx, Realm rm) {
 
   // Far spires: small, thin, deep in the fog
   vec2 s1 = layerP(p, cam, s, 0.45, -0.07);
-  vec4 sp = spires(s1 * 1.8 + vec2(seed * 0.37, 0.0), seed + 11.0, rm.shape.y, px * 10.0, uTime, rm); // soft edges: out of focus
+  vec4 sp = spires(s1 * 1.8 + vec2(seed * 0.37, 0.0), seed + 11.0, rm.shape.y * (0.35 + 0.65 * hash(vec2(seed, 72.0))), px * 10.0, uTime, rm); // soft edges: out of focus
   col = mix(col, fogged(sp.rgb, s1, 0.72, shaft, rm), sp.a);
 
   // Near spires: bigger, clearer, with caustics and glowing pores
   vec2 s3 = layerP(p, cam, s, 0.75, -0.025);
-  sp = spires(s3 * 0.9 + vec2(seed * 0.53 + 0.21, 0.0), seed + 23.0, rm.shape.y * 0.8, px * 3.0, uTime, rm);
+  sp = spires(s3 * 0.9 + vec2(seed * 0.53 + 0.21, 0.0), seed + 23.0, rm.shape.y * (0.25 + 0.65 * hash(vec2(seed, 19.0))), px * 3.0, uTime, rm);
   col = mix(col, fogged(sp.rgb, s3, 0.3, shaft, rm), sp.a);
 
   // The floor
@@ -112,9 +117,23 @@ vec3 world(vec2 p, vec2 cam, float s, uint wseed, float realmIdx, Realm rm) {
   col = mix(col, medium(m, rm) * 1.15, murk * 0.55);
   col += rm.light * shaft * 0.08;
 
-  // Drifters: translucent bell-creatures
+  // Each seed chooses a stable ecosystem, independent of the colour realm.
   vec2 s5 = layerP(p, cam, s, 0.9, -0.01);
-  col += drifters(s5 + vec2(seed * 0.29, 0.0), 1.8, uTime, seed + 31.0, px, rm) * 0.8;
+  float species = float(wseed % 4u);
+  if (species < 0.5) {
+    col += drifters(s5 + vec2(seed * 0.29, 0.0), 1.8, uTime, seed + 31.0, px, rm) * 0.8;
+  } else {
+    col += inhabitants(s5, seed, species - 1.0, px, rm);
+  }
+  col += garden(s4, seed, float((wseed / 7u) % 2u), px, rm);
+
+  return col;
+}
+
+vec3 world(vec2 p, vec2 cam, float s, uint wseed, float realmIdx, Realm rm) {
+  float seed = seedOffset(wseed);
+  float px = s / uResolution.y;
+  vec3 col = scenery(p, cam, s, wseed, realmIdx, rm);
 
   // The bubbles, seen from outside: a thin bright lip and halo; one too small to enter gets a glow inside
   for (int i = 0; i < SLOTS; i++) {
@@ -127,9 +146,9 @@ vec3 world(vec2 p, vec2 cam, float s, uint wseed, float realmIdx, Realm rm) {
       Realm inner = realm(childRealm(realmIdx, b.child));
       vec3 inside = mix(inner.deep, inner.shallow, smoothstep(-1.0, 1.0, q.y) * 0.8) + inner.light * 0.06;
       vec4 gl = glassFront(q, uLook, rm, cueOf(b));
-      col = inside * gl.a + gl.rgb * haze;
+      col = mix(col, inside * gl.a, 0.30) + gl.rgb * haze;
     } else if (r < 2.0) {
-      col += glassOuterRim(r, px / b.r, rm, cueOf(b)) * haze;
+      col += glassOuterRim(q, px / b.r, rm, cueOf(b)) * haze;
     }
   }
 
@@ -146,6 +165,7 @@ void main() {
     sin(uv.y * 9.0 + uTime * 0.7) + 0.5 * sin(uv.x * 13.0 - uTime * 0.45),
     cos(uv.x * 8.0 - uTime * 0.6) + 0.5 * cos(uv.y * 11.0 + uTime * 0.5)
   );
+  uv = handWarp(uv);
   uv = gestureWarp(uv, uGesture, uTime); // HOOK: keep
 
   // Start in the root world (the parent of where you are), then walk inward: while the pixel is inside a
@@ -173,10 +193,15 @@ void main() {
     }
     vec2 q = (p - hit.c) / hit.r;
     add += trans * frontParticles(p, cam, s, seedOffset(wseed), rm);
+    // Small bubbles let the surrounding scenery show through their miniature world.
+    // Become fully immersive before crossing the clear centre, preserving the seamless dive.
+    float interiorOpacity = mix(0.30, 1.0, smoothstep(0.22, 0.85, hit.r / s));
+    add += trans * (1.0 - interiorOpacity) * scenery(p, cam, s, wseed, realmIdx, rm);
+    trans *= interiorOpacity;
     vec4 gl = glassFront(q, uLook, rm, cueOf(hit));
     add += trans * gl.rgb;
     // The world inside reads a touch brighter while the bubble is small; exactly 1 by the time it fills the view
-    trans *= gl.a * (1.0 + 0.2 * (1.0 - smoothstep(0.3, 1.2, hit.r / s)));
+    trans *= gl.a;
     // Into the child world's coordinates
     p = refractRim(q) * WORLD_H;
     cam = (cam - hit.c) / hit.r * WORLD_H;
@@ -187,6 +212,7 @@ void main() {
 
   col = mix(BASE, add + trans * col, uFade);
   col = gestureLight(col, screenUv, uGesture, uTime); // HOOK: keep
+  col += handLight(screenUv) * uFade;
   col = moodGrade(col, screenUv, uMood, uTime);       // HOOK: keep
   col *= vignette(screenUv);
   col = tonemap(col * EXPOSURE);

@@ -9,7 +9,7 @@ const float GLASS_CLEAR = 0.7; // inside this radius the glass is perfectly clea
 // Refraction near the edge: the view bends outward, so the inner world bulges a little like through a lens
 vec2 refractRim(vec2 q) {
   float s = smoothstep(GLASS_CLEAR, 1.0, length(q));
-  return q * (1.0 + 0.3 * s * s);
+  return q * (1.0 + 0.42 * s * s);
 }
 
 // Looking through the glass from outside. Returns light added (rgb) and transmittance (a).
@@ -24,25 +24,41 @@ vec4 glassFront(vec2 q, vec2 look, Realm rm, float cue) {
   vec3 env = mix(rm.shallow * 1.5, rm.light, smoothstep(-0.5, 0.9, q.y));
   // Faint dispersion: the very edge splits warm inside, cool outside, like a real lens
   vec3 disp = mix(vec3(1.2, 0.95, 0.85), vec3(0.85, 1.0, 1.25), smoothstep(0.93, 1.0, r));
-  vec3 add = env * fresnel * 0.8 * disp;
+  vec3 add = env * fresnel * 0.32 * disp;
 
-  // Two soft speculars from the light above: a broad window and a small sharp glint
-  vec2 lp = normalize(vec2(-0.55, 0.83)) - look * 0.08;
-  vec2 hw = (q - lp * 0.8) * vec2(1.0, 1.6);
-  add += rm.light * 0.22 * exp(-dot(hw, hw) * 30.0) * rim;
-  vec2 hg = q - lp * 0.86;
-  add += vec3(1.0) * 0.6 * exp(-dot(hg, hg) * 900.0) * rim;
-  // Light focused through the sphere pools faintly on its lower inside edge
-  add += rm.light * 0.12 * exp(-pow((r - 0.94) / 0.03, 2.0)) * smoothstep(-0.2, -0.9, q.y) * rim;
+  // Broad pearly reflection stretched along the upper-left curve, like a sunlit soap bubble.
+  vec2 lightDir = normalize(vec2(-0.55, 0.83) - look * 0.08);
+  vec2 direction = q / max(r, 0.0001);
+  float facing = max(dot(direction, lightDir), 0.0);
+  float shoulder = exp(-pow((r - 0.89) / 0.075, 2.0));
+  float crest = exp(-pow((r - 0.967) / 0.022, 2.0));
+  vec3 pearl = vec3(0.88, 0.98, 1.0);
+  add += pearl * shoulder * pow(facing, 18.0) * 0.60 * rim;
+  add += vec3(1.0, 0.96, 0.88) * crest * pow(facing, 5.0) * 0.7 * rim;
+  // A second faint curved reflection gives the transparent shell a little thickness.
+  float innerArc = exp(-pow((r - 0.93) / 0.009, 2.0));
+  add += pearl * innerArc * pow(facing, 3.0) * 0.16 * rim;
+  vec2 glint = q - lightDir * 0.86;
+  add += vec3(1.0, 0.98, 0.92) * exp(-dot(glint, glint) * 300.0) * 0.85 * rim;
+  // Opposite the bright crest, a very fine champagne reflection catches the bottom curve.
+  float lower = smoothstep(0.1, 0.85, -q.y);
+  add += vec3(1.0, 0.71, 0.41) * 0.22 * lower
+    * exp(-pow((r - 0.975) / 0.014, 2.0)) * rim;
+  // A faint cool sidewall makes the surface read as a sphere around the clear centre.
+  add += rm.light * 0.035 * exp(-pow((r - 0.91) / 0.07, 2.0)) * rim;
   // The target cue: the edge quietly brightens
   add += rm.light * cue * 0.35 * exp(-pow((r - 0.97) / 0.03, 2.0));
 
-  float trans = 1.0 - 0.18 * rim * rim; // a touch of absorption at the edge only
+  float trans = 1.0 - 0.065 * rim * rim; // a touch of absorption at the edge only
   return vec4(add, trans);
 }
 
 // The outside of the edge: a hairline and a faint halo, so the edge reads as glass, not a hole.
-vec3 glassOuterRim(float r, float px, Realm rm, float cue) {
-  float line = exp(-pow((r - 1.0) / (0.008 + px), 2.0));
-  return rm.light * (line * (0.5 + 0.4 * cue) + (0.05 + 0.12 * cue) * exp(-max(r - 1.0, 0.0) * 18.0));
+vec3 glassOuterRim(vec2 q, float px, Realm rm, float cue) {
+  float r = length(q);
+  float line = exp(-pow((r - 1.0) / (0.003 + px * 0.65), 2.0));
+  float upper = smoothstep(-0.5, 0.8, q.y - q.x * 0.4);
+  vec3 reflection = mix(vec3(0.85, 0.58, 0.33), vec3(0.72, 0.94, 1.0), upper);
+  return reflection * line * (0.26 + upper * 0.30 + 0.3 * cue)
+    + rm.light * (0.009 + 0.03 * cue) * exp(-max(r - 1.0, 0.0) * 35.0);
 }

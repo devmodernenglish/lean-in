@@ -4,9 +4,9 @@
 
 const float WORLD_H = 2.0; // a child world's units per bubble radius (its home view fits well inside the clear glass)
 #define SLOTS 6
-// Where bubbles may sit in a world (home view: y spans -0.5..0.5). Slots are >= 0.4 apart, so bubbles never touch.
+// Irregular anchor regions with seeded scatter and independent drifting speeds.
 const vec2 SLOT_POS[SLOTS] = vec2[SLOTS](
-  vec2(0.0, 0.02), vec2(-0.5, 0.2), vec2(0.5, 0.18), vec2(-0.42, -0.24), vec2(0.42, -0.22), vec2(0.0, 0.42)
+  vec2(-0.06, -0.03), vec2(-0.57, 0.24), vec2(0.48, 0.29), vec2(-0.40, -0.31), vec2(0.59, -0.22), vec2(0.04, 0.39)
 );
 
 // Integer hash (Chris Wellons' lowbias32): scrambles all 32 bits. JS reproduces it with Math.imul.
@@ -48,9 +48,9 @@ Bubble bubbleAt(uint seed, int i, float s, float t, vec2 head) {
   b.depth = i == 0 ? 0.2 * f4 : f4;
   float settle = 1.0 - smoothstep(0.25, 0.6, b.r / s);
   float ph = f5 * 6.2831;
-  vec2 drift = 0.012 * vec2(sin(t * 0.2 + ph), sin(t * 0.17 + ph * 1.3));
+  vec2 drift = (0.009 + 0.012 * f0) * vec2(sin(t * (0.13 + 0.1 * f1) + ph), sin(t * (0.11 + 0.09 * f2) + ph * 1.3));
   vec2 par = head * mix(0.04, -0.05, b.depth) * min(s, 1.0);
-  b.c = SLOT_POS[i] + (vec2(f1, f2) - 0.5) * 0.08 + settle * (drift + par);
+  b.c = SLOT_POS[i] + (vec2(f1, f2) - 0.5) * 0.18 + settle * (drift + par);
   b.child = float(hash32(seed * 7u + uint(i) + 1u) & 0xFFFFFFu);
   return b;
 }

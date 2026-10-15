@@ -3,7 +3,7 @@
 // seed with the same 32-bit integer hash (Math.imul here, uint maths there), so they agree exactly.
 
 export const WORLD_H = 2.0 // a child world's units per bubble radius
-export const SLOT_POS = [[0.0, 0.02], [-0.5, 0.2], [0.5, 0.18], [-0.42, -0.24], [0.42, -0.22], [0.0, 0.42]]
+export const SLOT_POS = [[-0.06, -0.03], [-0.57, 0.24], [0.48, 0.29], [-0.40, -0.31], [0.59, -0.22], [0.04, 0.39]]
 
 /** Chris Wellons' lowbias32, bit-for-bit the GLSL hash32. Returns an unsigned 32-bit integer. */
 export function hash32(x) {
@@ -39,8 +39,8 @@ export function bubbleAt(seed, i, s, t, head) {
   const ph = f[5] * 6.2831
   const par = (0.04 + (-0.05 - 0.04) * depth) * Math.min(s, 1)
   const c = [0, 1].map((k) => {
-    const drift = 0.012 * (k ? Math.sin(t * 0.17 + ph * 1.3) : Math.sin(t * 0.2 + ph))
-    return SLOT_POS[i][k] + (f[1 + k] - 0.5) * 0.08 + settle * (drift + head[k] * par)
+    const drift = (0.009 + 0.012 * f[0]) * (k ? Math.sin(t * (0.11 + 0.09 * f[2]) + ph * 1.3) : Math.sin(t * (0.13 + 0.1 * f[1]) + ph))
+    return SLOT_POS[i][k] + (f[1 + k] - 0.5) * 0.18 + settle * (drift + head[k] * par)
   })
   return { i, c, r, depth, child: hash32((Math.imul(seed, 7) + i + 1) >>> 0) & 0xffffff, on: i < 2 || f[0] > 0.35 }
 }
