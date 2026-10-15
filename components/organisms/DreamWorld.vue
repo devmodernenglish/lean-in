@@ -9,8 +9,9 @@
 
 <script setup>
 import glowLayerSrc from '~/shaders/glowLayer.frag.glsl?raw'
+import { createDiveCamera } from '~/utils/diveCamera'
 
-// Realms cycle one per vessel: every vessel you dive into opens onto the next realm. Length must match REALMS
+// Realms cycle one per level: every bubble you dive into opens onto the next realm. Length must match REALMS
 // in the shader. Colours are linear RGB (the shader tonemaps at the end):
 // deep = the depths, shallow = toward the light above, light = shafts / highlights / caustics, accent = bioluminescence.
 // shape: [light shafts, spire density, particles, bioluminescence] strengths.
@@ -30,10 +31,9 @@ const REALMS = [
 ]
 
 const PARALLAX = 1 // head offset scale; each layer's own parallax factor is the `par` argument of layerP() in the shader
-const DESCENT_SPEED = 0.35 // octaves per second at lean 1 (one vessel = 2.77 octaves, ~8 s): leaning sets the speed of the dive
+const DESCENT_SPEED = 0.35 // octaves per second at lean 1 (a bubble is ~3-5 octaves deep): leaning sets the speed of the dive
 const LEAN_ZOOM = 0.5 // octaves of instant zoom per unit of lean, so leaning responds immediately
-const IDLE_DESCENT = 0.02 // octaves per second with no input: the vessel is always slowly drawing you in
-const LEVEL_OCT = 2.7692 // octaves per vessel; must match LEVEL_OCT in the shader
+const IDLE_DESCENT = 0.02 // octaves per second with no input: the nearest bubble is always slowly drawing you in
 const MOUTH_DIVE = 0.6 // extra lean-equivalent while the mouth is open: breathe in to dive
 const OMEGA_XY = 3 // spring stiffness: lower = floatier
 const OMEGA_Z = 2.2
@@ -53,21 +53,27 @@ const pointer = usePointerInput()
 const mood = useMood(head)
 const gestures = useGestures(head)
 
-// Preview params for screenshots / demos: ?fade=1&descent=3.6 skips the fade-in and starts at a depth
+// Preview params for screenshots / demos: ?fade=1&descent=3.6 skips the fade-in and starts zoomed in that many
+// octaves (negative = out); ?steer=-0.6,0 holds the steering (head / mouse x, y) fixed
 const params = new URLSearchParams(window.location.search)
+const fixedSteer = params.has('steer') ? params.get('steer').split(',').map(Number) : null
 
-const x = useSpring(0, OMEGA_XY)
-const y = useSpring(0, OMEGA_XY)
+const x = useSpring(fixedSteer?.[0] || 0, OMEGA_XY) // a fixed ?steer= starts already there, matching the replayed dive
+const y = useSpring(fixedSteer?.[1] || 0, OMEGA_XY)
 const z = useSpring(0, OMEGA_Z)
 
 // Glow eases in from black on load instead of popping
 const fade = useSpring(params.has('fade') ? Number(params.get('fade')) : 0, 1.4)
 fade.target = 1
 
-// An intentional blink (long or double) carries you through one vessel into the next world
+// The camera through the endless chain of bubble worlds (see utils/diveCamera.js)
+const dive = createDiveCamera()
+const aspect = () => window.innerWidth / Math.max(window.innerHeight, 1)
+
+// An intentional blink (long or double) carries you smoothly into the bubble you are heading for
 const jump = useSpring(0, 1.6)
 gestures.onIntent(() => {
-  jump.target += LEVEL_OCT
+  jump.target += dive.octavesToTarget(aspect()) + 0.3
 })
 
 const hasLeaned = ref(false)
@@ -85,6 +91,7 @@ const statusLabel = computed(() => (status.value === 'tracking' ? 'Head tracking
 
 /** Head when a face is seen; otherwise the mouse if it was just used (or there is no camera); otherwise rest. */
 function currentInput(now) {
+  if (fixedSteer) return { x: fixedSteer[0] || 0, y: fixedSteer[1] || 0, z: 0 }
   if (head.tracking) return head
   const cameraUp = status.value !== 'unavailable' && status.value !== 'loading'
   if (!cameraUp || now - pointer.lastActive < POINTER_OVERRIDE_MS) return pointer
@@ -94,7 +101,10 @@ function currentInput(now) {
 const uniforms = {
   uHeadOffset: new Float32Array(2),
   uLook: new Float32Array(2),
-  uDescent: 0,
+  uRoot: new Float32Array(2), // (seed, level) of the world the shader starts drawing from
+  uCam: new Float32Array(3), // camera centre x, y and scale, in that world's units
+  uTarget: -1, // seed of the bubble you are heading into
+  uCue: 0, // 0..1 how strongly to mark it
   uRealm: new Float32Array(REALMS.flatMap((r) => [...r.deep, ...r.shallow, ...r.light, ...r.accent])),
   uShape: new Float32Array(REALMS.flatMap((r) => r.shape)),
   uMood: mood.value,
@@ -105,7 +115,17 @@ const uniforms = {
 
 let worldTime = 0 // ambient clock: mood speeds it up or slows it down without ever jumping
 
-let descent = Number(params.get('descent')) || 0 // octaves travelled; unbounded in both directions
+// Start zoomed in (or out) by ?descent= octaves: replay the dive in small steps so magnetism centres the bubbles
+const startHead = [(fixedSteer?.[0] || 0) * PARALLAX, (fixedSteer?.[1] || 0) * PARALLAX + Math.sin(1.3) * DRIFT_AMP]
+const startOct = Number(params.get('descent')) || 0
+for (let done = 0; Math.abs(done) < Math.abs(startOct);) {
+  const step = Math.sign(startOct) * Math.min(0.012, Math.abs(startOct - done)) // ~ a full lean at 30 fps
+  dive.advance(1 / 30, { steer: fixedSteer || [0, 0], zoom: step, head: startHead, time: 0, aspect: aspect() })
+  done += step
+}
+
+let lastZ = 0
+let lastJump = 0
 
 function onFrame({ dt, time }) {
   const input = currentInput(performance.now())
@@ -118,10 +138,17 @@ function onFrame({ dt, time }) {
   uniforms.uHeadOffset[1] = y.value * PARALLAX + Math.sin(time * DRIFT_SPEED[1] + 1.3) * DRIFT_AMP
   uniforms.uLook[0] = x.value
   uniforms.uLook[1] = y.value
-  descent += (IDLE_DESCENT + DESCENT_SPEED * (z.value + MOUTH_DIVE * gestures.descentBoost)) * mood.descentScale * dt
-  uniforms.uDescent = descent + jump.value + LEAN_ZOOM * z.value
   worldTime += dt * mood.timeScale
   uniforms.uTime = worldTime
+
+  // Lean sets the speed of the dive; changes in lean (and a blink's jump) also zoom directly, for immediacy
+  const zoom = (IDLE_DESCENT + DESCENT_SPEED * (z.value + MOUTH_DIVE * gestures.descentBoost)) * mood.descentScale * dt
+    + LEAN_ZOOM * (z.value - lastZ) + (jump.value - lastJump)
+  lastZ = z.value
+  lastJump = jump.value
+  const pull = Math.min(Math.max(jump.target - jump.value, 0), 1)
+  dive.advance(dt, { steer: [x.value, y.value], zoom, head: uniforms.uHeadOffset, time: worldTime, aspect: aspect(), pull })
+  dive.write(uniforms, worldTime, uniforms.uHeadOffset)
   uniforms.uFade = fade.value
 }
 
