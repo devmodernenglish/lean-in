@@ -25,7 +25,7 @@ float spireWidth(float y, vec3 h, float freq, float phase) {
   float organicY = y + 0.06 * sin(y * 3.7 + phase) + 0.025 * sin(y * 9.3 + h.x * 8.0);
   float ribs = pow(abs(sin(organicY * freq + phase)), 6.0) + 0.5 * pow(abs(sin(organicY * freq * 0.5 + 1.0)), 18.0);
   float node = exp(-pow((fract(y * 0.45 + h.y) - 0.5) / 0.06, 2.0));
-  return (0.025 + 0.03 * h.x) * (1.0 + 0.2 * sin(y * 1.7 + h.z * 9.0) + 0.3 * ribs + 0.7 * node);
+  return (0.025 + 0.03 * h.x) * (1.0 + 0.2 * sin(y * 1.7 + h.z * 9.0) + 0.10 * ribs + 0.45 * node);
 }
 
 // Spires: tall ribbed bio-mechanical towers, at most one per column of width CELL, swaying slightly.
@@ -62,7 +62,7 @@ vec4 spires(vec2 p, float seed, float density, float px, float t, Realm rm) {
   // Hairline luminous seams follow each tower's curved sides and ribbing.
   float edge = exp(-pow((abs(nx) - 0.88) / 0.055, 2.0));
   float ribLine = pow(abs(sin(p.y * freq + phase)), 90.0);
-  col += rm.light * (edge * 0.15 + ribLine * 0.075) * lightAmt;
+  col += rm.light * (edge * 0.055 + ribLine * 0.025) * lightAmt;
   return vec4(col, cov);
 }
 

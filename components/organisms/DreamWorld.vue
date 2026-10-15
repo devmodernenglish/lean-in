@@ -27,15 +27,15 @@ import { createDiveCamera } from '~/utils/diveCamera'
 const REALMS = [
   { // Electric blue: deep cobalt water, icy cyan light, hot-pink bioluminescence
     deep: [0.004, 0.010, 0.045], shallow: [0.03, 0.10, 0.42], light: [0.45, 0.78, 1.0], accent: [1.0, 0.3, 0.85],
-    shape: [1.0, 0.6, 1.0, 0.7],
+    shape: [1.3, 0.08, 0.45, 0.8],
   },
   { // Abyssal violet: fine cyan bioluminescence and lavender light
     deep: [0.014, 0.005, 0.040], shallow: [0.16, 0.05, 0.34], light: [0.85, 0.62, 1.0], accent: [0.2, 0.95, 1.0],
-    shape: [0.9, 0.5, 1.2, 1.0],
+    shape: [0.25, 1.3, 1.4, 1.1],
   },
   { // Electric reef: turquoise depths and pale aqua light
-    deep: [0.002, 0.018, 0.035], shallow: [0.015, 0.20, 0.28], light: [0.40, 0.95, 1.0], accent: [0.20, 1.0, 0.75],
-    shape: [1.1, 0.7, 0.9, 0.8],
+    deep: [0.003, 0.025, 0.016], shallow: [0.07, 0.28, 0.12], light: [1.0, 0.87, 0.48], accent: [1.0, 0.45, 0.25],
+    shape: [0.9, 0.45, 0.7, 1.3],
   },
 ]
 
@@ -114,15 +114,18 @@ gestures.onIntent(() => {
 })
 
 const hasLeaned = ref(false)
+const explorationHintSeconds = ref(0)
 
 const hint = computed(() => {
+  // Exploration tips appear once, then leave the scene quiet. Setup/recovery prompts remain visible.
+  if (explorationHintSeconds.value >= 8 && !['loading', 'calibrating', 'lost'].includes(status.value)) return ''
   switch (status.value) {
-    case 'idle': return 'Move to stir light. Hold click to gather; release to cast. Scroll to dive.'
+    case 'idle': return 'Move your mouse to look around. Scroll to dive.'
     case 'loading': return 'Sit back.'
     case 'calibrating': return 'Sit back. Hold still.'
     case 'lost': return 'Come back into view.'
-    case 'unavailable': return 'Move to stir light. Hold click to gather; release to cast.'
-    default: return hands.status.value === 'tracking' ? 'Pinch to gather light. Open your hand to release it. Smile at the creatures.' : hands.status.value === 'unavailable' ? 'Hand tracking unavailable. Move the mouse; hold click to gather light.' : hasLeaned.value ? 'Raise a hand to stir light. Smile at the creatures.' : 'Now lean in. Raise a hand to stir light.'
+    case 'unavailable': return 'Move your mouse to look around. Scroll to dive.'
+    default: return hands.status.value === 'tracking' ? 'Pinch to gather light. Open your hand to release it. Smile at the creatures.' : hands.status.value === 'unavailable' ? 'Hand tracking unavailable. Move your mouse to look around; scroll to dive.' : hasLeaned.value ? 'Raise a hand to stir light. Smile at the creatures.' : 'Now lean in. Raise a hand to stir light.'
   }
 })
 const statusLabel = computed(() => (status.value === 'tracking' ? 'Head tracking' : 'Mouse and scroll'))
@@ -170,6 +173,9 @@ let lastZ = 0
 let lastJump = 0
 
 function onFrame({ dt, time }) {
+  if (!introOpen.value && !['loading', 'calibrating', 'lost'].includes(status.value) && explorationHintSeconds.value < 8) {
+    explorationHintSeconds.value += dt
+  }
   const input = currentInput(performance.now())
   x.target = input.x
   y.target = input.y

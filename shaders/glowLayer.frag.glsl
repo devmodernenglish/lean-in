@@ -98,13 +98,14 @@ vec3 scenery(vec2 p, vec2 cam, float s, uint wseed, float realmIdx, Realm rm) {
   vec3 col = medium(m, rm) + rm.light * shaft * 0.12;
 
   // Far spires: small, thin, deep in the fog
+  vec2 terrainStretch = realmIdx < 0.5 ? vec2(0.8, 1.4) : realmIdx < 1.5 ? vec2(1.5, 0.65) : vec2(0.65, 1.8);
   vec2 s1 = layerP(p, cam, s, 0.45, -0.07);
-  vec4 sp = spires(s1 * 1.8 + vec2(seed * 0.37, 0.0), seed + 11.0, rm.shape.y * (0.35 + 0.65 * hash(vec2(seed, 72.0))), px * 10.0, uTime, rm); // soft edges: out of focus
+  vec4 sp = spires(s1 * terrainStretch * 1.8 + vec2(seed * 0.37, 0.0), seed + 11.0, rm.shape.y * (0.35 + 0.65 * hash(vec2(seed, 72.0))), px * 10.0, uTime, rm); // soft edges: out of focus
   col = mix(col, fogged(sp.rgb, s1, 0.72, shaft, rm), sp.a);
 
   // Near spires: bigger, clearer, with caustics and glowing pores
   vec2 s3 = layerP(p, cam, s, 0.75, -0.025);
-  sp = spires(s3 * 0.9 + vec2(seed * 0.53 + 0.21, 0.0), seed + 23.0, rm.shape.y * (0.25 + 0.65 * hash(vec2(seed, 19.0))), px * 3.0, uTime, rm);
+  sp = spires(s3 * terrainStretch * 0.9 + vec2(seed * 0.53 + 0.21, 0.0), seed + 23.0, rm.shape.y * (0.25 + 0.65 * hash(vec2(seed, 19.0))), px * 3.0, uTime, rm);
   col = mix(col, fogged(sp.rgb, s3, 0.3, shaft, rm), sp.a);
 
   // The floor
@@ -117,15 +118,18 @@ vec3 scenery(vec2 p, vec2 cam, float s, uint wseed, float realmIdx, Realm rm) {
   col = mix(col, medium(m, rm) * 1.15, murk * 0.55);
   col += rm.light * shaft * 0.08;
 
-  // Each seed chooses a stable ecosystem, independent of the colour realm.
+  // Each realm has a distinct ecosystem, with stable variation from its seed.
   vec2 s5 = layerP(p, cam, s, 0.9, -0.01);
-  float species = float(wseed % 4u);
+  float species = realmIdx < 0.5 ? 0.0 : realmIdx < 1.5 ? 3.0 : 1.0 + float(wseed % 2u);
   if (species < 0.5) {
     col += drifters(s5 + vec2(seed * 0.29, 0.0), 1.8, uTime, seed + 31.0, px, rm) * 0.8;
   } else {
     col += inhabitants(s5, seed, species - 1.0, px, rm);
   }
-  col += garden(s4, seed, float((wseed / 7u) % 2u), px, rm);
+  if (realmIdx > 0.5) {
+    float reef = step(1.5, realmIdx);
+    col += garden(s4 * vec2(mix(0.7, 1.6, reef), 1.0), seed, 1.0 - reef, px, rm) * mix(0.5, 1.7, reef);
+  }
 
   return col;
 }

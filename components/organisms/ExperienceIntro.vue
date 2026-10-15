@@ -27,7 +27,7 @@
           <button class="intro__primary" type="button" @click="$emit('enter')">Let’s go <span aria-hidden="true">↗</span></button>
         </template>
       </div>
-      <p class="intro__small">Pinch to gather light; open your hand to release it.<br>With a mouse: move, hold click, then release.<br>Smile and watch the creatures shimmer back.</p>
+      <p class="intro__small">Pinch to gather light; open your hand to release it.<br>With a mouse: move to look around; scroll to dive.<br>Smile and watch the creatures shimmer back.</p>
       <p class="intro__privacy">Camera stays private. Nothing recorded or uploaded.</p>
       <button class="intro__secondary" type="button" @click="$emit('enter')">{{ status === 'tracking' ? 'Return to exploring' : 'Use mouse instead' }}</button>
     </div>

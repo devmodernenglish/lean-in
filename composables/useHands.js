@@ -1,14 +1,13 @@
 import { readHand } from '~/utils/handGesture'
 
-// Shares the already authorised webcam. One hand at 15 Hz keeps face tracking responsive.
+// Shares the already authorised webcam. One hand at 20 Hz keeps face tracking responsive.
 export function useHands(head, enabled) {
   const status = ref('idle')
   const palm = new Float32Array(4) // normalised x, y, visibility, gathered light
   const trail = new Float32Array(12 * 4)
   const burst = new Float32Array([0, 0, 10, 0]) // x, y, age, strength
-  let detector, loading = false, disposed = false, lastFrame = -1, lastDetect = 0
+  let detector, loading = false, disposed = false, lastFrame = -1, lastDetect = 0, lastSeen = 0
   let target = null, pinching = false, charge = 0, sampleClock = 0
-  let pointerUntil = 0, pointerDown = false
 
   async function load() {
     loading = true
@@ -19,13 +18,16 @@ export function useHands(head, enabled) {
       const create = (delegate) => HandLandmarker.createFromOptions(files, {
         baseOptions: { modelAssetPath: '/models/hand_landmarker.task', delegate },
         runningMode: 'VIDEO', numHands: 1,
+        minHandDetectionConfidence: 0.45,
+        minHandPresenceConfidence: 0.45,
+        minTrackingConfidence: 0.45,
       })
       const instance = await create('GPU').catch(() => create('CPU'))
       if (disposed) instance.close()
       else { detector = instance; status.value = 'ready' }
     } catch (error) {
       status.value = 'unavailable'
-      console.warn('Hand tracking unavailable; mouse play is still available.', error)
+      console.warn('Hand tracking unavailable; mouse navigation is still available.', error)
     }
   }
 
@@ -34,24 +36,11 @@ export function useHands(head, enabled) {
     pinching = false
     charge = 0
   }
-  function pointer(e) {
-    if (!enabled.value || e.target.closest?.('button, .intro')) return
-    pointerUntil = performance.now() + 1200
-    target = { x: e.clientX / window.innerWidth, y: 1 - e.clientY / window.innerHeight, pinching: pointerDown }
-  }
-  function down(e) { if (e.button !== 0) return; pointerDown = true; pointer(e) }
-  function up() { pointerDown = false; if (target) target.pinching = false }
-  function blur() { pointerUntil = 0; pointerDown = false; target = null; pinching = false; charge = 0 }
-  window.addEventListener('pointermove', pointer)
-  window.addEventListener('pointerdown', down)
-  window.addEventListener('pointerup', up)
+  function blur() { target = null; pinching = false; charge = 0; lastSeen = 0 }
   window.addEventListener('blur', blur)
   onScopeDispose(() => {
     disposed = true
     detector?.close()
-    window.removeEventListener('pointermove', pointer)
-    window.removeEventListener('pointerdown', down)
-    window.removeEventListener('pointerup', up)
     window.removeEventListener('blur', blur)
   })
 
@@ -60,20 +49,23 @@ export function useHands(head, enabled) {
     const video = head.video
     if (video && !loading && status.value === 'idle') load()
     if (!enabled.value) { target = null; pinching = false; charge = 0 }
-    else if (!pointerDown && now > pointerUntil) {
-      if (detector && video?.readyState >= 2 && video.currentTime !== lastFrame && now - lastDetect > 66) {
+    else {
+      if (detector && video?.readyState >= 2 && video.currentTime !== lastFrame && now - lastDetect > 50) {
         lastFrame = video.currentTime
         lastDetect = now
         try {
           const result = detector.detectForVideo(video, now)
-          target = result.landmarks[0] ? readHand(result.landmarks[0], pinching) : null
+          if (result.landmarks[0]) {
+            target = readHand(result.landmarks[0], pinching, video.videoWidth / video.videoHeight)
+            lastSeen = now
+          } else if (now - lastSeen > 220) target = null
           status.value = target ? 'tracking' : 'ready'
         } catch (error) {
           detector.close(); detector = null; target = null; status.value = 'unavailable'
-          console.warn('Hand tracking stopped; mouse play is still available.', error)
+          console.warn('Hand tracking stopped; mouse navigation is still available.', error)
         }
       }
-      if (!video || now - lastDetect > 350) target = null
+      if (!video || now - lastDetect > 350) { target = null; if (detector) status.value = 'ready' }
     }
     if (!target) { pinching = false; charge = 0 } // Tracking loss must never launch a ball.
     else {
