@@ -1,0 +1,19 @@
+{
+  "name": "lean-in",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "rm -rf public/mediapipe && cp -R node_modules/@mediapipe/tasks-vision/wasm public/mediapipe"
+  },
+  "devDependencies": {
+    "sass": "^1.105.1"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^1.1.1",
+    "nuxt": "^4.6.1"
+  }
+}

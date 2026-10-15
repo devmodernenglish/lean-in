@@ -1,0 +1,21 @@
+@use './tokens' as *;
+
+// Needs the global `fade-in` keyframes from main.scss
+@mixin fade-in($duration: $dur-ui) {
+  animation: fade-in $duration $ease-out both;
+}
+
+@mixin glass {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@mixin visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
