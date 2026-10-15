@@ -24,16 +24,17 @@ vec3 moodGrade(vec3 col, vec2 uv, vec4 mood, float time) {
   col *= mix(vec3(1.0), vec3(0.78, 0.9, 1.12), sad);
   col *= 1.0 - 0.32 * sad;
 
-  // JOY: warmer white balance, a little more light, and golden light bleeding in from above.
-  // Warming alone only turns a blue scene grey, so part of the colour is re-tinted: keep each pixel's
-  // brightness (lum) but give it a gold hue (the tint's own luma is ~1, so brightness is preserved).
+  // JOY: a rosy white balance, a little more light, and soft pink light bleeding in from above.
+  // White balance alone only shifts a blue scene a little, so part of the colour is re-tinted: keep each
+  // pixel's brightness (lum) but give it a lilac-pink hue (the tint's own luma is ~1, so brightness is
+  // preserved). It stays soft and luminous; tension owns the hard red-magenta.
   // The bleed is a soft gradient (top of screen) that breathes slowly, scaled by the scene's own
-  // brightness plus a small floor, so dark water glows amber instead of turning orange.
-  col *= mix(vec3(1.0), vec3(1.16, 1.03, 0.82), joy);
-  col = mix(col, dot(col, LUMA) * vec3(1.45, 0.95, 0.42), 0.4 * joy);
+  // brightness plus a small floor, so dark water glows rose instead of turning flat pink.
+  col *= mix(vec3(1.0), vec3(1.12, 0.95, 1.08), joy);
+  col = mix(col, dot(col, LUMA) * vec3(1.45, 0.8, 1.35), 0.4 * joy);
   col *= 1.0 + 0.45 * joy; // blue reads darker than its luma, so re-tinted blue needs a lift to feel brighter
   float above = smoothstep(-0.35, 0.6, uv.y) * (0.85 + 0.15 * sin(time * 0.5 + uv.x * 2.0));
-  col += joy * above * vec3(1.0, 0.68, 0.32) * (0.06 + 0.6 * dot(col, LUMA));
+  col += joy * above * vec3(1.0, 0.55, 0.95) * (0.06 + 0.6 * dot(col, LUMA));
 
   // TENSION: harder contrast, a red/magenta cast, the edges closing in, and a nervous flicker + grain.
   // Contrast: push each value away from a mid-grey pivot (power curve, so blacks stay black).

@@ -41,6 +41,7 @@ out vec4 fragColor;
 const float MIN_BUBBLE = 0.006; // bubbles smaller than this on screen (~5 px) get a cheap glow inside
 const vec3 BASE = vec3(0.020, 0.031, 0.078); // #050814: the colour we fade in from
 const float EXPOSURE = 1.25;
+const float WATER_SHIMMER = 0.0012; // screen heights the view sways (~1-2 px); 0 turns the shimmer off
 
 Realm realm(float idx) {
   int i = int(idx + 0.5) % REALMS; // idx is a whole number; +0.5 guards against float error
@@ -139,6 +140,12 @@ void main() {
   // Centred, aspect-correct coords: y spans -0.5..0.5, x wider on landscape screens.
   vec2 uv = (gl_FragCoord.xy - 0.5 * uResolution) / uResolution.y;
   vec2 screenUv = uv;
+  // Water shimmer: two slow, crossing sine swells bend the view by a pixel or two, like looking through water.
+  // Screen-space and the same on both sides of a bubble crossing, so it never shows a seam.
+  uv += WATER_SHIMMER * vec2(
+    sin(uv.y * 9.0 + uTime * 0.7) + 0.5 * sin(uv.x * 13.0 - uTime * 0.45),
+    cos(uv.x * 8.0 - uTime * 0.6) + 0.5 * cos(uv.y * 11.0 + uTime * 0.5)
+  );
   uv = gestureWarp(uv, uGesture, uTime); // HOOK: keep
 
   // Start in the root world (the parent of where you are), then walk inward: while the pixel is inside a

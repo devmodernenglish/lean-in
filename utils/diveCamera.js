@@ -10,7 +10,9 @@ const ENTER_CLEAR = 0.62 // cross in when the whole screen lies within this frac
 const EXIT_CLEAR = 0.68 // ...and back out when it reaches past this (glass is perfectly clear inside 0.7)
 const RANGE = [0.65, 0.45] // screen heights the view shifts across at full steer (left/right, up/down)
 const STEER_DEAD = 0.12 // ignore head/mouse offsets smaller than this
-const MAGNET = 3 // 1/s: how hard the camera centre is drawn to the nearest bubble once it is big on screen
+const MAGNET = 1.6 // 1/s: how hard the camera centre is drawn to the nearest bubble once it is big on screen
+const MAGNET_MAX = 5 // 1/s: cap on that pull, so even a big bubble draws you in like a current, never a yank
+const VIEW_OMEGA = 2.4 // 1/s: the visible camera glides after the navigation camera (critically damped), like water
 const BOUND = [0.8, 0.45] // the camera centre is eased back inside this box of the current world
 const S_MAX = 1.6 // furthest zoom out at the outermost world
 const S_RISE = 2.5 // always rise into the parent past this zoom-out
@@ -34,6 +36,9 @@ export function createDiveCamera({ baseSeed = 4242 } = {}) {
   }
 
   const cam = { c: [0, 0], s: 1 }
+  // What is drawn: a critically damped follower of `cam` (centre and log2 scale), so every change of course
+  // (steering, the magnet, a blink's dive) eases in and out with weight. Velocities live in the same coordinates.
+  const view = { c: [0, 0], l: 0, vc: [0, 0], vl: 0 }
   let target = null // the bubble you are heading into
   let cue = 0
   let lastSteer = [0, 0]
@@ -42,12 +47,27 @@ export function createDiveCamera({ baseSeed = 4242 } = {}) {
   // Distance from point b to the furthest screen corner, in world units
   const reach = (c, s, b, aspect) => Math.hypot(Math.abs(c[0] - b[0]) + 0.5 * aspect * s, Math.abs(c[1] - b[1]) + 0.5 * s)
 
-  /** The bubble of the parent world that holds the current one, as seen at the current camera scale */
-  function parentBubble(t, head) {
+  /** The bubble of the parent world that holds the current one, as seen at camera scale s */
+  function parentBubble(t, head, s = cam.s) {
     const w = current()
     const parent = stack[stack.length - 2]
     const r = bubbleAt(parent.seed, w.index, 1, t, head).r
-    return bubbleAt(parent.seed, w.index, cam.s * r / WORLD_H, t, head)
+    return bubbleAt(parent.seed, w.index, s * r / WORLD_H, t, head)
+  }
+
+  // Re-express the glide state in another world's coordinates: p' = offset + p * k (scale s' = s * k)
+  function reframeView(offset, k) {
+    view.c = [offset[0] + view.c[0] * k, offset[1] + view.c[1] * k]
+    view.vc = [view.vc[0] * k, view.vc[1] * k]
+    view.l += Math.log2(k)
+  }
+
+  // One critically damped step (same maths as useSpring's springStep)
+  function glide(pos, vel, target, dt) {
+    const x = pos - target
+    const e = Math.exp(-VIEW_OMEGA * dt)
+    const t = (vel + VIEW_OMEGA * x) * dt
+    return [target + (x + t) * e, (vel - VIEW_OMEGA * t) * e]
   }
 
   /**
@@ -85,7 +105,7 @@ export function createDiveCamera({ baseSeed = 4242 } = {}) {
     // Steering weakens the pull while bubbles are small (you are choosing); once one is big, it has you
     const free = 1 - 0.6 * Math.min(Math.hypot(sx, sy), 1) * (1 - smoothstep(0.3, 1.0, target.r / cam.s))
     const k = (MAGNET * grow * free + 4 * pull) / Math.max(cam.s / target.r, 0.25)
-    const a = 1 - Math.exp(-dt * Math.min(k, 30))
+    const a = 1 - Math.exp(-dt * Math.min(k, MAGNET_MAX))
     cam.c[0] += (target.c[0] - cam.c[0]) * a
     cam.c[1] += (target.c[1] - cam.c[1]) * a
     cue += (smoothstep(0.12, 0.5, target.r / cam.s) - cue) * (1 - Math.exp(-dt * 3))
@@ -95,6 +115,8 @@ export function createDiveCamera({ baseSeed = 4242 } = {}) {
       stack.push({ seed: target.child, realm: childRealm(w.realm, target.child), index: target.i })
       cam.c = [(cam.c[0] - target.c[0]) / target.r * WORLD_H, (cam.c[1] - target.c[1]) / target.r * WORLD_H]
       cam.s *= WORLD_H / target.r
+      const k = WORLD_H / target.r
+      reframeView([-target.c[0] * k, -target.c[1] * k], k)
       cue = 0
     } else if (stack.length > 1 && ((zoom < 0 && reach(cam.c, cam.s, [0, 0], aspect) > EXIT_CLEAR * WORLD_H) || cam.s > S_RISE)) {
       // Rise out: sitting back has the screen reaching past the clear part of the bubble we are in. (Steering
@@ -103,27 +125,41 @@ export function createDiveCamera({ baseSeed = 4242 } = {}) {
       stack.pop()
       cam.c = [b.c[0] + cam.c[0] * b.r / WORLD_H, b.c[1] + cam.c[1] * b.r / WORLD_H]
       cam.s *= b.r / WORLD_H
+      reframeView(b.c, b.r / WORLD_H)
       cue = 0
     } else if (cam.s < S_MIN) {
       cam.s = S_MIN
     }
+
+    // The visible camera glides after the navigation camera
+    for (let i = 0; i < 2; i++) [view.c[i], view.vc[i]] = glide(view.c[i], view.vc[i], cam.c[i], dt)
+    ;[view.l, view.vl] = glide(view.l, view.vl, Math.log2(cam.s), dt)
+  }
+
+  /** Jump the glide straight to the camera (after a scripted start, e.g. ?descent=) */
+  function snapView() {
+    view.c = [...cam.c]
+    view.l = Math.log2(cam.s)
+    view.vc = [0, 0]
+    view.vl = 0
   }
 
   /** Write the shader's uniforms: it draws from the parent of the current world, so the outside is always there. */
   function write(u, time, head) {
     const w = current()
+    const vs = 2 ** view.l
     if (stack.length > 1) {
-      const b = parentBubble(time, head)
+      const b = parentBubble(time, head, vs)
       const parent = stack[stack.length - 2]
       u.uRoot[0] = parent.seed
       u.uRoot[1] = parent.realm
-      u.uCam[0] = b.c[0] + cam.c[0] * b.r / WORLD_H
-      u.uCam[1] = b.c[1] + cam.c[1] * b.r / WORLD_H
-      u.uCam[2] = cam.s * b.r / WORLD_H
+      u.uCam[0] = b.c[0] + view.c[0] * b.r / WORLD_H
+      u.uCam[1] = b.c[1] + view.c[1] * b.r / WORLD_H
+      u.uCam[2] = vs * b.r / WORLD_H
     } else {
       u.uRoot[0] = w.seed
       u.uRoot[1] = w.realm
-      u.uCam.set([cam.c[0], cam.c[1], cam.s])
+      u.uCam.set([view.c[0], view.c[1], vs])
     }
     u.uTarget = target ? target.child : -1
     u.uCue = cue
@@ -132,6 +168,7 @@ export function createDiveCamera({ baseSeed = 4242 } = {}) {
   return {
     advance,
     write,
+    snapView,
     /** Octaves of zoom still needed to cross into the bubble you are heading for */
     octavesToTarget: (aspect) => (target ? Math.max(Math.log2(cam.s * Math.hypot(aspect, 1) * 0.5 / (ENTER_CLEAR * target.r)), 0) : 0),
     get depth() { return stack.length - 1 },

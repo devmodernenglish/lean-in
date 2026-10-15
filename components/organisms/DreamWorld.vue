@@ -30,12 +30,12 @@ const REALMS = [
   },
 ]
 
-const PARALLAX = 1 // head offset scale; each layer's own parallax factor is the `par` argument of layerP() in the shader
+const PARALLAX = 0.6 // head offset scale; each layer's own parallax factor is the `par` argument of layerP() in the shader
 const DESCENT_SPEED = 0.35 // octaves per second at lean 1 (a bubble is ~3-5 octaves deep): leaning sets the speed of the dive
 const LEAN_ZOOM = 0.5 // octaves of instant zoom per unit of lean, so leaning responds immediately
 const IDLE_DESCENT = 0.02 // octaves per second with no input: the nearest bubble is always slowly drawing you in
 const MOUTH_DIVE = 0.6 // extra lean-equivalent while the mouth is open: breathe in to dive
-const OMEGA_XY = 3 // spring stiffness: lower = floatier
+const OMEGA_XY = 2 // spring stiffness: lower = floatier (the dive camera adds its own water glide on top)
 const OMEGA_Z = 2.2
 const POINTER_OVERRIDE_MS = 2000 // mouse/scroll takes over for this long after use when no face is seen
 const LEANED_IN = 0.4 // smoothed lean that counts as "they got it": hides the prompt
@@ -123,6 +123,7 @@ for (let done = 0; Math.abs(done) < Math.abs(startOct);) {
   dive.advance(1 / 30, { steer: fixedSteer || [0, 0], zoom: step, head: startHead, time: 0, aspect: aspect() })
   done += step
 }
+dive.snapView()
 
 let lastZ = 0
 let lastJump = 0
