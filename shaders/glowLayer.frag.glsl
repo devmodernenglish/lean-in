@@ -8,7 +8,7 @@ precision highp int;
 // You steer toward a bubble with your head and lean in: nothing fades out, the bubble grows until its clear
 // middle fills the screen, and from then on you are in the world inside it.
 
-#define REALMS 3 // must match REALMS.length in DreamWorld.vue
+#define REALMS 6 // must match REALMS.length in DreamWorld.vue
 
 uniform vec2 uResolution;          // canvas size in pixels (set by GlCanvas)
 uniform float uTime;               // seconds, mood-scaled (set by DreamWorld)
@@ -23,6 +23,8 @@ uniform vec4 uShape[REALMS];       // per realm: light shafts, spire density, pa
 uniform vec4 uMood;                // (joy, sadness, surprise, tension) 0..1, see chunks/mood.glsl
 uniform vec4 uGesture;             // (blink, mouth, wink, spare) 0..1, see chunks/gestures.glsl
 uniform vec4 uPalm;
+uniform vec4 uHandMotion; // hand velocity, depth pull, grip
+uniform vec2 uHandAnchor; // gel grab position
 uniform vec4 uHandTrail[12];
 uniform vec4 uHandBurst;
 uniform float uFade;               // @slider 0..1 default 1 "Fade in from black"
@@ -38,6 +40,7 @@ out vec4 fragColor;
 #include "beings"
 #include "bubbles"
 #include "ecosystems"
+#include "biomes"
 #include "tonemap"
 #include "mood"
 #include "gestures"
@@ -98,7 +101,7 @@ vec3 scenery(vec2 p, vec2 cam, float s, uint wseed, float realmIdx, Realm rm) {
   vec3 col = medium(m, rm) + rm.light * shaft * 0.12;
 
   // Far spires: small, thin, deep in the fog
-  vec2 terrainStretch = realmIdx < 0.5 ? vec2(0.8, 1.4) : realmIdx < 1.5 ? vec2(1.5, 0.65) : vec2(0.65, 1.8);
+  vec2 terrainStretch = realmIdx < 0.5 ? vec2(0.8, 1.4) : realmIdx < 1.5 ? vec2(1.5, 0.65) : realmIdx < 2.5 ? vec2(0.65, 1.8) : realmIdx < 3.5 ? vec2(1.3, 1.8) : vec2(1.0);
   vec2 s1 = layerP(p, cam, s, 0.45, -0.07);
   vec4 sp = spires(s1 * terrainStretch * 1.8 + vec2(seed * 0.37, 0.0), seed + 11.0, rm.shape.y * (0.35 + 0.65 * hash(vec2(seed, 72.0))), px * 10.0, uTime, rm); // soft edges: out of focus
   col = mix(col, fogged(sp.rgb, s1, 0.72, shaft, rm), sp.a);
@@ -111,7 +114,8 @@ vec3 scenery(vec2 p, vec2 cam, float s, uint wseed, float realmIdx, Realm rm) {
   // The floor
   vec2 s4 = layerP(p, cam, s, 0.85, -0.012);
   vec4 sb = seabed(s4, seed, px * 2.0, uTime, rm);
-  col = mix(col, fogged(sb.rgb, s4, 0.25, shaft, rm), sb.a);
+  float floorAmount = realmIdx > 3.5 && realmIdx < 4.5 ? 0.0 : 1.0;
+  col = mix(col, fogged(sb.rgb, s4, 0.25, shaft, rm), sb.a * floorAmount);
 
   // Drifting murk: slow clouds of silt, then a last veil of light
   float murk = smoothstep(0.4, 0.85, fbm(m * 1.4 + vec2(uTime * 0.012, seed)));
@@ -120,17 +124,18 @@ vec3 scenery(vec2 p, vec2 cam, float s, uint wseed, float realmIdx, Realm rm) {
 
   // Each realm has a distinct ecosystem, with stable variation from its seed.
   vec2 s5 = layerP(p, cam, s, 0.9, -0.01);
-  float species = realmIdx < 0.5 ? 0.0 : realmIdx < 1.5 ? 3.0 : 1.0 + float(wseed % 2u);
+  float species = realmIdx < 0.5 ? 0.0 : realmIdx < 1.5 ? 3.0 : realmIdx < 2.5 ? 1.0 + float(wseed % 2u) : realmIdx < 3.5 ? 3.0 : realmIdx < 4.5 ? 1.0 : 0.0;
   if (species < 0.5) {
     col += drifters(s5 + vec2(seed * 0.29, 0.0), 1.8, uTime, seed + 31.0, px, rm) * 0.8;
   } else {
     col += inhabitants(s5, seed, species - 1.0, px, rm);
   }
-  if (realmIdx > 0.5) {
+  if (realmIdx > 0.5 && realmIdx < 2.5) {
     float reef = step(1.5, realmIdx);
     col += garden(s4 * vec2(mix(0.7, 1.6, reef), 1.0), seed, 1.0 - reef, px, rm) * mix(0.5, 1.7, reef);
   }
 
+  col += biomeDetail(s4, seed, realmIdx, px, rm);
   return col;
 }
 

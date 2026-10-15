@@ -77,7 +77,7 @@ export function useMood(head) {
 
     for (let i = 0; i < 4; i++) {
       const s = springs[i]
-      springStep(s, raw[i], raw[i] > s.value ? OMEGA_RISE : OMEGA_FALL, dt)
+      springStep(s, raw[i], raw[i] > s.value ? (i === 0 ? 5.2 : OMEGA_RISE) : OMEGA_FALL, dt)
       const v = Math.min(Math.max(s.value, 0), 1)
       mood.value[i] = v < SNAP && raw[i] === 0 ? 0 : v
     }

@@ -14,7 +14,7 @@ export const MOOD_SHAPES = [
 // Per mood: dead zone (ignore twitches below this), gain (how far an expression must go to reach 1).
 // Frowns and presses score low in MediaPipe even when obvious, so they get more gain.
 const SHAPE = {
-  joy: { dead: 0.06, gain: 2.0 },
+  joy: { dead: 0.045, gain: 3.2 },
   sadness: { dead: 0.04, gain: 3.0 },
   surprise: { dead: 0.06, gain: 2.2 },
   tension: { dead: 0.05, gain: 2.6 },

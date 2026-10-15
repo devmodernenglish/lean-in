@@ -3,10 +3,10 @@
     <div class="intro__card">
       <div class="intro__orb" aria-hidden="true"><span></span><i></i></div>
       <h1 id="intro-title">Lean in.</h1>
-      <p class="intro__description">Lean closer. Smile. Express yourself.<br>Raise a hand and stir the light.</p>
+      <p class="intro__description">Move. Make a face. See what happens.</p>
       <div class="intro__action" aria-live="polite" aria-atomic="true">
         <template v-if="status === 'idle' || status === 'unavailable'">
-          <p v-if="status === 'unavailable'" class="intro__message">Camera unavailable. Allow access in your browser or use your mouse.</p>
+          <p v-if="status === 'unavailable'" class="intro__message">Camera unavailable. You can still explore.</p>
           <button class="intro__primary" type="button" @click="$emit('enable')">{{ status === 'unavailable' ? 'Try camera again' : 'Enable camera' }} <span aria-hidden="true">↗</span></button>
         </template>
         <template v-else-if="status === 'loading'">
@@ -16,18 +16,17 @@
         <template v-else-if="status === 'calibrating'">
           <p class="intro__message">{{ progress > 0 ? 'Hold still for two seconds.' : 'Sit back and face your camera.' }}</p>
           <div class="intro__progress" role="progressbar" aria-label="Finding your starting position" :aria-valuenow="Math.round(progress * 100)" aria-valuemin="0" aria-valuemax="100"><span :style="{ width: `${progress * 100}%` }"></span></div>
-          <p class="intro__small">Relax your face. We’re finding your starting point.</p>
+          <p class="intro__small">Finding your starting point.</p>
         </template>
         <template v-else-if="status === 'lost'">
           <p class="intro__message">Move back into the camera’s view.</p>
           <p class="intro__small">We’ll pick up where you left off.</p>
         </template>
         <template v-else>
-          <p class="intro__message">Ready. Lean closer and see what happens.</p>
+          <p class="intro__message">Ready when you are.</p>
           <button class="intro__primary" type="button" @click="$emit('enter')">Let’s go <span aria-hidden="true">↗</span></button>
         </template>
       </div>
-      <p class="intro__small">Pinch to gather light; open your hand to release it.<br>With a mouse: move to look around; scroll to dive.<br>Smile and watch the creatures shimmer back.</p>
       <p class="intro__privacy">Camera stays private. Nothing recorded or uploaded.</p>
       <button class="intro__secondary" type="button" @click="$emit('enter')">{{ status === 'tracking' ? 'Return to exploring' : 'Use mouse instead' }}</button>
     </div>

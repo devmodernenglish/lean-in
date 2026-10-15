@@ -57,5 +57,5 @@ Bubble bubbleAt(uint seed, int i, float s, float t, vec2 head) {
 
 // Realm (0..2) of the world inside a bubble: always different from its parent's, and varied between siblings
 float childRealm(float realm, float childSeed) {
-  return mod(realm + 1.0 + float(uint(childSeed) % 2u), 3.0);
+  return mod(realm + 1.0 + float(uint(childSeed) % uint(REALMS - 1)), float(REALMS));
 }

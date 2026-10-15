@@ -4,6 +4,7 @@
     <div v-if="cameraVisible && cameraStream" class="dream-world__reflection" aria-hidden="true">
       <video ref="reflectionVideo" class="dream-world__video" autoplay muted playsinline />
     </div>
+    <span v-if="cameraVisible && cameraStream && !introOpen" class="dream-world__tracking-readout">{{ handReadout }}</span>
     <ExperienceIntro v-if="introOpen" :status="status" :progress="progress" @enable="head.start()" @enter="introOpen = false" />
     <div v-else class="dream-world__controls">
       <button class="dream-world__help" type="button" :aria-pressed="cameraVisible" :disabled="status === 'loading'" @click="toggleCameraView">{{ cameraVisible ? 'Hide camera view' : 'Show camera view' }}</button>
@@ -12,30 +13,43 @@
     <p v-if="!introOpen && cameraMessage" class="dream-world__camera-message" role="status">{{ cameraMessage }}</p>
     <CalibrationRing class="dream-world__ring" :progress="progress" :visible="!introOpen && status === 'calibrating'" />
     <HintLine class="dream-world__hint" :text="introOpen ? '' : hint" />
-    <StatusDot class="dream-world__status" :live="status === 'tracking'" :label="statusLabel" />
+    <StatusDot class="dream-world__status" :live="status === 'tracking' || hands.status.value === 'tracking'" :label="statusLabel" />
   </div>
 </template>
 
 <script setup>
 import glowLayerSrc from '~/shaders/glowLayer.frag.glsl?raw'
 import { createDiveCamera } from '~/utils/diveCamera'
+import { createDiscoveryHints } from '~/utils/discoveryHints'
 
 // Bubbles open into different electric deep-sea worlds. Length must match REALMS
 // in the shader. Colours are linear RGB (the shader tonemaps at the end):
 // deep = the depths, shallow = toward the light above, light = shafts / highlights / caustics, accent = bioluminescence.
 // shape: [light shafts, spire density, particles, bioluminescence] strengths.
 const REALMS = [
-  { // Electric blue: deep cobalt water, icy cyan light, hot-pink bioluminescence
-    deep: [0.004, 0.010, 0.045], shallow: [0.03, 0.10, 0.42], light: [0.45, 0.78, 1.0], accent: [1.0, 0.3, 0.85],
+  { // Neon pink: fuchsia water and violet bioluminescence
+    deep: [0.045, 0.002, 0.025], shallow: [0.48, 0.012, 0.20], light: [1.0, 0.18, 0.65], accent: [0.6, 0.15, 1.0],
     shape: [1.3, 0.08, 0.45, 0.8],
   },
   { // Abyssal violet: fine cyan bioluminescence and lavender light
-    deep: [0.014, 0.005, 0.040], shallow: [0.16, 0.05, 0.34], light: [0.85, 0.62, 1.0], accent: [0.2, 0.95, 1.0],
+    deep: [0.018, 0.002, 0.065], shallow: [0.22, 0.015, 0.62], light: [0.72, 0.25, 1.0], accent: [0.20, 0.8, 1.0],
     shape: [0.25, 1.3, 1.4, 1.1],
   },
-  { // Electric reef: turquoise depths and pale aqua light
-    deep: [0.003, 0.025, 0.016], shallow: [0.07, 0.28, 0.12], light: [1.0, 0.87, 0.48], accent: [1.0, 0.45, 0.25],
+  { // Electric green: neon emerald reef with acid-lime growths
+    deep: [0.002, 0.035, 0.006], shallow: [0.035, 0.52, 0.012], light: [0.18, 1.0, 0.08], accent: [0.7, 1.0, 0.02],
     shape: [0.9, 0.45, 0.7, 1.3],
+  },
+  { // Radioactive yellow: sulphur plumes and chartreuse creatures
+    deep: [0.035, 0.028, 0.001], shallow: [0.42, 0.38, 0.004], light: [1.0, 0.95, 0.04], accent: [0.6, 1.0, 0.015],
+    shape: [0.12, 0.8, 1.5, 1.4],
+  },
+  { // Rose silk: open plum water crossed by flowing translucent membranes
+    deep: [0.035, 0.002, 0.018], shallow: [0.40, 0.018, 0.12], light: [1.0, 0.26, 0.48], accent: [0.85, 0.12, 1.0],
+    shape: [0.4, 0.0, 0.25, 0.9],
+  },
+  { // Ice cathedral: pale glacial water and sharp crystalline growths
+    deep: [0.008, 0.026, 0.045], shallow: [0.11, 0.28, 0.36], light: [0.72, 0.94, 1.0], accent: [0.4, 0.7, 1.0],
+    shape: [1.5, 0.15, 0.65, 0.6],
   },
 ]
 
@@ -47,7 +61,6 @@ const MOUTH_DIVE = 0.6 // extra lean-equivalent while the mouth is open: breathe
 const OMEGA_XY = 2 // spring stiffness: lower = floatier (the dive camera adds its own water glide on top)
 const OMEGA_Z = 2.2
 const POINTER_OVERRIDE_MS = 2000 // mouse/scroll takes over for this long after use when no face is seen
-const LEANED_IN = 0.4 // smoothed lean that counts as "they got it": hides the prompt
 
 // Idle drift: a slow Lissajous wander in screen units. Periods ~50 s and ~70 s so it never visibly loops.
 const DRIFT_AMP = 0.3
@@ -86,6 +99,13 @@ watchEffect(() => {
 }, { flush: 'post' })
 const handsEnabled = computed(() => !introOpen.value)
 const hands = useHands(head, handsEnabled)
+const discovery = createDiscoveryHints()
+const handReadout = computed(() => {
+  if (hands.status.value === 'loading') return 'Finding your hands…'
+  if (hands.status.value === 'unavailable') return 'Hand tracking unavailable'
+  const labels = { together: 'Hands together', push: 'Push forward', sweep: 'Apart and back', swimming: 'Swimming' }
+  return `${hands.handCount.value} hands detected · ${labels[hands.swimPhase.value]}`
+})
 const pointer = usePointerInput()
 const mood = useMood(head)
 const gestures = useGestures(head)
@@ -109,26 +129,34 @@ const aspect = () => window.innerWidth / Math.max(window.innerHeight, 1)
 
 // An intentional blink (long or double) carries you smoothly into the bubble you are heading for
 const jump = useSpring(0, 1.6)
+const swimJump = useSpring(0, 3.8)
+hands.onSwim(() => {
+  discovery.record('swim')
+  // Finish one surge before accepting another, even if another stroke is detected.
+  if (swimJump.target - swimJump.value > 0.1) return
+  swimJump.target += dive.octavesToTarget(aspect()) + 0.35
+})
 gestures.onIntent(() => {
+  if (!introOpen.value) discovery.record('blink')
   jump.target += dive.octavesToTarget(aspect()) + 0.3
 })
 
-const hasLeaned = ref(false)
-const explorationHintSeconds = ref(0)
+const discoveryHint = ref('')
+const cameraHints = ['A little closer?', 'What if you made a face?', 'Let your hands wander.']
+const mouseHints = ['Follow your curiosity.', 'A little movement?', 'Scroll a little deeper.']
+let previousPose = null
+
+gestures.onWink(() => { if (!introOpen.value) discovery.record('wink') })
 
 const hint = computed(() => {
-  // Exploration tips appear once, then leave the scene quiet. Setup/recovery prompts remain visible.
-  if (explorationHintSeconds.value >= 8 && !['loading', 'calibrating', 'lost'].includes(status.value)) return ''
   switch (status.value) {
-    case 'idle': return 'Move your mouse to look around. Scroll to dive.'
     case 'loading': return 'Sit back.'
     case 'calibrating': return 'Sit back. Hold still.'
-    case 'lost': return 'Come back into view.'
-    case 'unavailable': return 'Move your mouse to look around. Scroll to dive.'
-    default: return hands.status.value === 'tracking' ? 'Pinch to gather light. Open your hand to release it. Smile at the creatures.' : hands.status.value === 'unavailable' ? 'Hand tracking unavailable. Move your mouse to look around; scroll to dive.' : hasLeaned.value ? 'Raise a hand to stir light. Smile at the creatures.' : 'Now lean in. Raise a hand to stir light.'
+    case 'lost': return hands.status.value === 'tracking' ? '' : 'Come back into view.'
+    default: return discoveryHint.value
   }
 })
-const statusLabel = computed(() => (status.value === 'tracking' ? 'Head tracking' : 'Mouse and scroll'))
+const statusLabel = computed(() => hands.status.value === 'tracking' ? 'Hand tracking' : status.value === 'tracking' ? 'Head tracking' : 'Mouse and scroll')
 
 /** Head when a face is seen; otherwise the mouse if it was just used (or there is no camera); otherwise rest. */
 function currentInput(now) {
@@ -149,6 +177,8 @@ const uniforms = {
   uRealm: new Float32Array(REALMS.flatMap((r) => [...r.deep, ...r.shallow, ...r.light, ...r.accent])),
   uShape: new Float32Array(REALMS.flatMap((r) => r.shape)),
   uPalm: hands.palm,
+  uHandMotion: hands.motion,
+  uHandAnchor: hands.anchor,
   uHandTrail: hands.trail,
   uHandBurst: hands.burst,
   uMood: mood.value,
@@ -171,16 +201,30 @@ dive.snapView()
 
 let lastZ = 0
 let lastJump = 0
+let lastSwimJump = 0
 
 function onFrame({ dt, time }) {
-  if (!introOpen.value && !['loading', 'calibrating', 'lost'].includes(status.value) && explorationHintSeconds.value < 8) {
-    explorationHintSeconds.value += dt
+  if (!introOpen.value && !['loading', 'calibrating', 'lost'].includes(status.value) && !document.hidden) {
+    const kinds = []
+    if (head.tracking) {
+      if (previousPose && Math.hypot(head.x - previousPose.x, head.y - previousPose.y, head.z - previousPose.z) > 0.025) kinds.push('movement')
+      previousPose = { x: head.x, y: head.y, z: head.z }
+      if (Math.max(...mood.value) > 0.35 || gestures.value[1] > 0.3) kinds.push('expression')
+    } else {
+      previousPose = null
+      if (performance.now() - pointer.lastActive < 150) kinds.push('movement')
+    }
+    if (hands.palm[2] > 0.5 && (Math.hypot(hands.motion[0], hands.motion[1]) > 0.12 || hands.motion[3] > 0.5)) kinds.push('hands')
+    const index = discovery.step(dt, kinds)
+    discoveryHint.value = index < 0 ? '' : (head.tracking ? cameraHints : mouseHints)[index]
+  } else {
+    previousPose = null
+    discoveryHint.value = ''
   }
   const input = currentInput(performance.now())
   x.target = input.x
   y.target = input.y
   z.target = input.z
-  if (!hasLeaned.value && z.value > LEANED_IN) hasLeaned.value = true
 
   uniforms.uHeadOffset[0] = x.value * PARALLAX + Math.sin(time * DRIFT_SPEED[0]) * DRIFT_AMP
   uniforms.uHeadOffset[1] = y.value * PARALLAX + Math.sin(time * DRIFT_SPEED[1] + 1.3) * DRIFT_AMP
@@ -191,10 +235,11 @@ function onFrame({ dt, time }) {
 
   // Lean sets the speed of the dive; changes in lean (and a blink's jump) also zoom directly, for immediacy
   const zoom = (IDLE_DESCENT + DESCENT_SPEED * (z.value + MOUTH_DIVE * gestures.descentBoost)) * mood.descentScale * dt
-    + LEAN_ZOOM * (z.value - lastZ) + (jump.value - lastJump)
+    + LEAN_ZOOM * (z.value - lastZ) + (jump.value - lastJump) + (swimJump.value - lastSwimJump)
   lastZ = z.value
   lastJump = jump.value
-  const pull = Math.min(Math.max(jump.target - jump.value, 0), 1)
+  lastSwimJump = swimJump.value
+  const pull = Math.min(Math.max(jump.target - jump.value, swimJump.target - swimJump.value, 0), 1)
   dive.advance(dt, { steer: [x.value, y.value], zoom, head: uniforms.uHeadOffset, time: worldTime, aspect: aspect(), pull })
   dive.write(uniforms, worldTime, uniforms.uHeadOffset)
   uniforms.uFade = fade.value
@@ -227,6 +272,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       background: linear-gradient(135deg, #32d9e6, #7060d9 55%, #e77bc5);
       mix-blend-mode: color;
     }
+  }
+  &__tracking-readout {
+    position: absolute;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 7px 10px;
+    border-radius: 8px;
+    background: #030812cc;
+    color: $color-text;
+    font-size: 10px;
+    text-align: center;
+    pointer-events: none;
   }
   &__video {
     width: 100%;

@@ -56,4 +56,5 @@ export function bubblesOf(seed, s, t, head) {
 }
 
 /** Realm (0..2) of the world inside a bubble: always different from its parent's, and varied between siblings */
-export const childRealm = (realm, childSeed) => (realm + 1 + (childSeed % 2)) % 3
+export const REALM_COUNT = 6
+export const childRealm = (realm, childSeed) => (realm + 1 + (childSeed % (REALM_COUNT - 1))) % REALM_COUNT

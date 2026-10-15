@@ -13,7 +13,7 @@ vec3 inhabitants(vec2 p, float seed, float kind, float px, Realm rm) {
     // Bodies flex continuously from head to tail rather than moving as rigid symbols.
     q.y += 0.10 * sin(q.x * 2.1 - uTime * (0.7 + h.z * 0.5) + fi)
       * smoothstep(-0.8, 1.4, q.x);
-    q.x *= 1.0 + 0.035 * sin(uTime * 0.9 + fi) + uMood.x * 0.09 * sin(uTime * 3.0 + fi);
+    q.x *= 1.0 + 0.035 * sin(uTime * 0.9 + fi) + uMood.x * 0.18 * sin(uTime * 3.0 + fi);
     float glow = 0.0;
     if (kind < 1.0) {
       // A fleshy central body blends into broad, softly scalloped swimming fins.
@@ -51,7 +51,7 @@ vec3 inhabitants(vec2 p, float seed, float kind, float px, Realm rm) {
     }
     col += mix(rm.light, rm.accent, h.y * 0.6) * glow * 0.65;
   }
-  return col * (1.0 + uMood.x * (1.1 + 0.3 * sin(uTime * 3.0 + seed)));
+  return col * (1.0 + uMood.x * (2.2 + 0.5 * sin(uTime * 3.0 + seed)));
 }
 
 vec3 garden(vec2 p, float seed, float kind, float px, Realm rm) {
