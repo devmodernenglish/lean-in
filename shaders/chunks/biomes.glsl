@@ -38,7 +38,7 @@ vec3 biomeDetail(vec2 p, float seed, float realmIdx, float px, Realm rm) {
       float body = (1.0 - smoothstep(width, width + px * 2.0, abs(q.x))) * gate;
       float facet = 0.4 + 0.6 * smoothstep(-width, width, q.x);
       float edge = exp(-pow((abs(q.x) - width) / (0.002 + px), 2.0)) * gate;
-      col += rm.light * (body * facet * 0.16 + edge * 0.19);
+      col += rm.light * (body * (0.7 + facet * 0.3) * 0.13 + edge * 0.075);
     }
   }
   return col;

@@ -4,13 +4,13 @@
 
 const vec3 LIGHT_DIR = vec3(-0.42, 0.78, 0.46); // from upper left, toward the viewer (normalised below)
 
-// Lit material: soft diffuse, a tight highlight, a little ambient. albedo is the base colour.
+// Flatter material: mostly even colour, gentle diffuse shaping, and a restrained highlight.
 vec3 shade(vec3 n, vec3 albedo, float lightAmt, float shininess, Realm rm) {
   vec3 L = normalize(LIGHT_DIR);
   float diff = max(dot(n, L), 0.0);
   float spec = pow(max(dot(n, normalize(L + vec3(0.0, 0.0, 1.0))), 0.0), shininess); // Blinn-Phong
   float wrap = 0.5 + 0.5 * n.y; // sky light: surfaces facing up see more of the bright water above
-  return albedo * (rm.deep * 3.0 + rm.light * (diff * lightAmt + wrap * 0.18)) + rm.light * spec * lightAmt * 0.5;
+  return albedo * (rm.deep * 3.0 + rm.light * ((0.48 + diff * 0.22) * lightAmt + wrap * 0.10)) + rm.light * spec * lightAmt * 0.06;
 }
 
 // Caustics: the dancing net of light that waves focus onto surfaces. Edges of a slowly moving Voronoi.
@@ -54,7 +54,7 @@ vec4 spires(vec2 p, float seed, float density, float px, float t, Realm rm) {
   float lightAmt = mix(0.15, 1.0, smoothstep(-1.2, 0.9, p.y));
   vec3 albedo = mix(rm.shallow, vec3(0.5, 0.52, 0.48), 0.3);
   vec3 col = shade(n, albedo, lightAmt, 24.0, rm);
-  col += rm.light * caustics(p * 7.0, t, seed) * 0.12 * lightAmt * smoothstep(-0.3, 0.6, n.y - n.x * 0.5);
+  col += rm.light * caustics(p * 7.0, t, seed) * 0.035 * lightAmt * smoothstep(-0.3, 0.6, n.y - n.x * 0.5);
   // Glowing pores on some ribs: the machinery is alive
   float pore = pow(abs(sin(p.y * freq + phase)), 40.0) * smoothstep(0.25, 0.0, abs(nx - 0.3 * sin(p.y * 3.0 + phase)))
     * smoothstep(0.4, 0.9, sin(p.y * freq / 3.0 + h.y * 7.0)); // smooth gate: only every few ribs
@@ -69,7 +69,7 @@ vec4 spires(vec2 p, float seed, float density, float px, float t, Realm rm) {
 // The floor of a world: a ridge of grown rock and coral along the bottom, lit along its top edge.
 // Returns colour (rgb) and coverage (a).
 vec4 seabed(vec2 p, float seed, float px, float t, Realm rm) {
-  float hgt = -0.42 + 0.3 * (fbm(vec2(p.x * 1.3, seed)) - 0.5) + 0.06 * pow(abs(sin(p.x * 7.0 + seed)), 4.0)
+  float hgt = -0.42 + 0.16 * (fbm(vec2(p.x * 1.3, seed)) - 0.5) + 0.025 * pow(abs(sin(p.x * 7.0 + seed)), 4.0)
     + 0.015 * (noise(vec2(p.x * 24.0, seed)) - 0.5);
   float d = p.y - hgt;
   float cov = smoothstep(px, -px, d);
@@ -78,7 +78,7 @@ vec4 seabed(vec2 p, float seed, float px, float t, Realm rm) {
   float tex = fbm(p * vec2(9.0, 14.0) + seed);
   vec3 n = normalize(vec3((tex - 0.5) * 1.2, 1.0 - depth, 0.6));
   vec3 col = shade(n, mix(rm.shallow, vec3(0.45, 0.42, 0.35), 0.4) * (0.6 + 0.6 * tex), 0.8, 16.0, rm);
-  col += rm.light * caustics(p * 6.0, t, seed) * 0.18 * (1.0 - depth);
+  col += rm.light * caustics(p * 6.0, t, seed) * 0.055 * (1.0 - depth);
   col = mix(col, rm.deep * 1.5, smoothstep(0.1, 1.0, depth) * 0.85);
   return vec4(col, cov);
 }

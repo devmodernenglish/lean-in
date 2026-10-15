@@ -68,7 +68,7 @@ vec2 layerP(vec2 p, vec2 cam, float s, float rate, float par) {
   return cam + (p - cam) * pow(sc, rate - 1.0) + uHeadOffset * par * sc;
 }
 
-// Snow, rising bubbles and plankton drifting in front of everything. They fly past and are gone before any
+// Dust, pulsing light motes and plankton drifting in front of everything. They fly past and are gone before any
 // bubble can fill the screen (s -> 0.09), and fade in as a nested world comes closer (s from 4 to 1.3).
 vec3 frontParticles(vec2 p, vec2 cam, float s, float seed, Realm rm) {
   float fade = smoothstep(0.09, 0.3, s) * smoothstep(4.0, 1.3, s) * rm.shape.z;
@@ -77,9 +77,9 @@ vec3 frontParticles(vec2 p, vec2 cam, float s, float seed, Realm rm) {
   vec2 a = layerP(p, cam, s, 1.35, 0.05);
   float sn = snow(a, 24.0, uTime, seed, 0.0012, px * 1.5 + 0.0005);
   float pl = plankton(a + 0.37, 11.0, uTime, seed + 5.0);
-  float bu = bubbles(layerP(p, cam, s, 1.6, 0.09), 7.0, uTime, seed + 3.0, px);
+  float motes = lightMotes(layerP(p, cam, s, 1.6, 0.09), 12.0, uTime, seed + 3.0, px);
   float bokeh = snow(layerP(p, cam, s, 2.2, 0.16), 4.0, uTime * 0.7, seed + 9.0, 0.014, 0.012);
-  return (rm.light * (sn * 0.25 + bu * 0.3 + bokeh * 0.08) + rm.accent * pl * rm.shape.w * 0.6) * fade;
+  return (rm.light * (sn * 0.25 + motes * 0.7 + bokeh * 0.08) + rm.accent * pl * rm.shape.w * 0.6) * fade;
 }
 
 // How strongly bubble b is marked as where you are heading
@@ -102,18 +102,18 @@ vec3 scenery(vec2 p, vec2 cam, float s, uint wseed, float realmIdx, Realm rm) {
 
   // Far spires: small, thin, deep in the fog
   vec2 terrainStretch = realmIdx < 0.5 ? vec2(0.8, 1.4) : realmIdx < 1.5 ? vec2(1.5, 0.65) : realmIdx < 2.5 ? vec2(0.65, 1.8) : realmIdx < 3.5 ? vec2(1.3, 1.8) : vec2(1.0);
-  vec2 s1 = layerP(p, cam, s, 0.45, -0.07);
-  vec4 sp = spires(s1 * terrainStretch * 1.8 + vec2(seed * 0.37, 0.0), seed + 11.0, rm.shape.y * (0.35 + 0.65 * hash(vec2(seed, 72.0))), px * 10.0, uTime, rm); // soft edges: out of focus
+  vec2 s1 = layerP(p, cam, s, 0.72, -0.025);
+  vec4 sp = spires((s1 * vec2(1.0, 1.25) + vec2(0.0, 0.15)) * terrainStretch * 1.8 + vec2(seed * 0.37, 0.0), seed + 11.0, rm.shape.y * (0.35 + 0.65 * hash(vec2(seed, 72.0))), px * 10.0, uTime, rm); // soft edges: out of focus
   col = mix(col, fogged(sp.rgb, s1, 0.72, shaft, rm), sp.a);
 
   // Near spires: bigger, clearer, with caustics and glowing pores
-  vec2 s3 = layerP(p, cam, s, 0.75, -0.025);
-  sp = spires(s3 * terrainStretch * 0.9 + vec2(seed * 0.53 + 0.21, 0.0), seed + 23.0, rm.shape.y * (0.25 + 0.65 * hash(vec2(seed, 19.0))), px * 3.0, uTime, rm);
+  vec2 s3 = layerP(p, cam, s, 0.82, -0.018);
+  sp = spires((s3 * vec2(1.0, 1.25) + vec2(0.0, 0.15)) * terrainStretch * 0.9 + vec2(seed * 0.53 + 0.21, 0.0), seed + 23.0, rm.shape.y * (0.25 + 0.65 * hash(vec2(seed, 19.0))), px * 3.0, uTime, rm);
   col = mix(col, fogged(sp.rgb, s3, 0.3, shaft, rm), sp.a);
 
   // The floor
   vec2 s4 = layerP(p, cam, s, 0.85, -0.012);
-  vec4 sb = seabed(s4, seed, px * 2.0, uTime, rm);
+  vec4 sb = seabed(s4 + vec2(0.0, 0.08), seed, px * 2.0, uTime, rm);
   float floorAmount = realmIdx > 3.5 && realmIdx < 4.5 ? 0.0 : 1.0;
   col = mix(col, fogged(sb.rgb, s4, 0.25, shaft, rm), sb.a * floorAmount);
 
