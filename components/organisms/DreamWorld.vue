@@ -16,17 +16,17 @@ import { createDiveCamera } from '~/utils/diveCamera'
 // deep = the depths, shallow = toward the light above, light = shafts / highlights / caustics, accent = bioluminescence.
 // shape: [light shafts, spire density, particles, bioluminescence] strengths.
 const REALMS = [
-  { // Teal sea: murky green-blue water, cold light from above
-    deep: [0.006, 0.026, 0.032], shallow: [0.06, 0.25, 0.26], light: [0.55, 0.95, 0.85], accent: [0.3, 1.0, 0.65],
-    shape: [1.0, 0.6, 1.0, 0.6],
+  { // Electric blue: deep cobalt water, icy cyan light, hot-pink bioluminescence
+    deep: [0.004, 0.010, 0.045], shallow: [0.03, 0.10, 0.42], light: [0.45, 0.78, 1.0], accent: [1.0, 0.3, 0.85],
+    shape: [1.0, 0.6, 1.0, 0.7],
   },
-  { // Sunken garden: green-gold, warm light, amber spores
-    deep: [0.014, 0.026, 0.01], shallow: [0.18, 0.22, 0.07], light: [1.0, 0.86, 0.52], accent: [1.0, 0.55, 0.18],
-    shape: [1.1, 0.75, 0.9, 0.8],
+  { // Ultraviolet: violet water, lavender light, cyan plankton
+    deep: [0.014, 0.005, 0.040], shallow: [0.16, 0.05, 0.34], light: [0.85, 0.62, 1.0], accent: [0.2, 0.95, 1.0],
+    shape: [0.9, 0.5, 1.2, 1.0],
   },
-  { // Violet abyss: deep indigo, starlike plankton
-    deep: [0.012, 0.009, 0.038], shallow: [0.09, 0.07, 0.22], light: [0.72, 0.66, 1.0], accent: [0.85, 0.4, 1.0],
-    shape: [0.75, 0.45, 1.2, 1.0],
+  { // Neon lagoon: cyan-green water, mint light, pink sparks
+    deep: [0.003, 0.030, 0.030], shallow: [0.02, 0.26, 0.24], light: [0.5, 1.0, 0.85], accent: [1.0, 0.35, 0.7],
+    shape: [1.1, 0.7, 0.9, 0.8],
   },
 ]
 
