@@ -1,0 +1,16 @@
+# Cloudflare Pages response headers. Copied into dist/; Nitro appends the
+# /_nuxt/* cache rules for the hashed build assets after these.
+# Docs: https://developers.cloudflare.com/pages/configuration/headers/
+
+/*
+  Permissions-Policy: camera=(self), microphone=()
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+
+# MediaPipe wasm and the face model are not content-hashed: cache for a day
+# and revalidate in the background so a new deploy is picked up quickly.
+/mediapipe/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+
+/models/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
